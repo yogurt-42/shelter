@@ -70,6 +70,24 @@
 - 减号字符 `−` (U+2212) 更换为 ASCII `-`，修复 SimHei 字体渲染方框问题
 - 建造/清理/升级操作增加全资源检查（之前只检查废料），资源不足时给出具体提示
 
+## 步骤 5.2 — 管理员模式
+
+新增 4 条管理模式命令和 2 个 GameState 标记：
+
+| 命令 | 效果 |
+|------|------|
+| `//i am infinite` | 无限资源 — 无视资源消耗、上限、费用检查 |
+| `//full speed` | 极速建造 — 所有建造/清理等待时间归零 |
+| `//it is enough` | 退出全部管理模式 |
+| `//i am 42` | 一键开启全部管理模式 |
+
+- `resource_system.py`：`infinite_resources` 时跳过资源扣除和上限钳制
+- `popup.py`：`_check_resources` / `_deduct_resource` 在无限资源模式下跳过
+- `main.py`：`_tick_construction` 在极速模式下即刻完成所有在建项目
+- `game_state.py`：新增 `infinite_resources` / `full_speed` bool 字段
+- `console.py`：支持多词命令匹配（`i am infinite`、`full speed` 等）
+- `+`/`-` 按钮改为 `pygame.draw.rect` 绘制的图形符号，彻底消除字体依赖
+
 ---
 
 ## 技术决策记录

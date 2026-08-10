@@ -101,7 +101,7 @@ def draw(surface: pygame.Surface, state, fonts: dict):
         for res, rate in jt_data.get("production", {}).items():
             info_parts.append(f"{res}+{rate}/s/人")
         for res, rate in jt_data.get("consumption", {}).items():
-            info_parts.append(f"{res}−{rate}/s/人")
+            info_parts.append(f"{res}-{rate}/s/人")
 
         info_text = "  ".join(info_parts) if info_parts else jt_data.get("description", "")
         info_surf = font.render(info_text, True, COLOR_TEXT_DIM)
@@ -109,22 +109,36 @@ def draw(surface: pygame.Surface, state, fonts: dict):
 
 
 def _draw_btn(surface, rect, label, font, enabled, mx, my):
-    """Draw a small square +/- button."""
+    """Draw a small square +/- button. Symbols are drawn as shapes to avoid
+    missing-glyph issues with CJK fonts that lack HYPHEN-MINUS / PLUS SIGN."""
     if enabled:
         hover = rect.collidepoint(mx, my)
         btn_bg = (80, 80, 80) if hover else (50, 50, 50)
-        text_color = COLOR_TEXT_BRIGHT
+        sym_color = COLOR_TEXT_BRIGHT
     else:
         btn_bg = (30, 30, 30)
-        text_color = COLOR_TEXT_DIM
+        sym_color = COLOR_TEXT_DIM
 
     pygame.draw.rect(surface, btn_bg, rect, border_radius=2)
     pygame.draw.rect(surface, COLOR_BORDER, rect, width=1, border_radius=2)
 
-    label_surf = font.render(label, True, text_color)
-    lx = rect.x + (rect.width - label_surf.get_width()) // 2
-    ly = rect.y + (rect.height - label_surf.get_height()) // 2 - 1
-    surface.blit(label_surf, (lx, ly))
+    cx = rect.x + rect.width // 2
+    cy = rect.y + rect.height // 2
+
+    if label == "+":
+        # vertical bar
+        pygame.draw.rect(surface, sym_color, (cx - 1, cy - 4, 2, 8))
+        # horizontal bar
+        pygame.draw.rect(surface, sym_color, (cx - 4, cy - 1, 8, 2))
+    elif label == "-":
+        # horizontal bar only
+        pygame.draw.rect(surface, sym_color, (cx - 4, cy - 1, 8, 2))
+    else:
+        # fallback text render for any other label
+        label_surf = font.render(label, True, sym_color)
+        lx = rect.x + (rect.width - label_surf.get_width()) // 2
+        ly = rect.y + (rect.height - label_surf.get_height()) // 2 - 1
+        surface.blit(label_surf, (lx, ly))
 
     return rect
 

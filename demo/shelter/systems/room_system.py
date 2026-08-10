@@ -1,1 +1,0 @@
-"""Shelter — room system (placeholder)."""

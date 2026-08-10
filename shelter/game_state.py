@@ -62,6 +62,10 @@ class GameState:
     # job_type -> assigned worker count
     job_assignment: dict = field(default_factory=dict)
 
+    # ---- admin flags ----
+    infinite_resources: bool = False  # //i am infinite — no resource cost / cap
+    full_speed: bool = False          # //full speed — instant build & clear
+
     # ---- time ----
     start_time: float = field(default_factory=time.time)
     elapsed_seconds: float = 0.0
@@ -138,12 +142,16 @@ class GameState:
         slot = self.get_room_slot(floor, room)
         slot["state"] = ROOM_STATE_BUILDING
         slot["room_type"] = room_key
+        if self.full_speed:
+            build_time = 0
         slot["build_end_time"] = time.time() + build_time
         slot["action_type"] = "building"
 
     def start_clearing(self, floor: int, room: int, clear_time: float):
         slot = self.get_room_slot(floor, room)
         slot["state"] = ROOM_STATE_CLEARING
+        if self.full_speed:
+            clear_time = 0
         slot["build_end_time"] = time.time() + clear_time
         slot["action_type"] = "clearing"
 

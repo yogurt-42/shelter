@@ -516,6 +516,8 @@ def _check_resources(state, cost: dict) -> tuple:
     """Check if state has enough resources for a cost dict.
     Returns (can_afford: bool, list_of_failure_messages: list[str]).
     """
+    if getattr(state, "infinite_resources", False):
+        return (True, [])
     failures = []
     for res_key, amount in cost.items():
         current = _get_resource(state, res_key)
@@ -531,6 +533,8 @@ def _get_resource(state, key: str) -> float:
 
 
 def _deduct_resource(state, key: str, amount):
+    if getattr(state, "infinite_resources", False):
+        return
     mapping = {"power": "power", "water": "water", "food": "food", "scrap": "scrap"}
     attr = mapping.get(key)
     if attr:

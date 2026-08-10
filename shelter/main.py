@@ -80,7 +80,13 @@ def _tick_construction(state):
         for r in range(len(state.floors[f])):
             slot = state.floors[f][r]
             end_time = slot.get("build_end_time")
-            if end_time is not None and now >= end_time and slot.get("action_type"):
+            if end_time is None:
+                continue
+            # full_speed: fast-forward anything still waiting
+            if getattr(state, "full_speed", False) and now < end_time:
+                slot["build_end_time"] = 0
+                end_time = 0
+            if now >= end_time and slot.get("action_type"):
                 action = slot["action_type"]
                 state.complete_construction(f, r)
                 if action == "building":

@@ -36,6 +36,12 @@ def _cmd_help(state) -> list[str]:
 
 
 def _cmd_admin_help(state) -> list[str]:
+    mode_flags = []
+    if state.infinite_resources:
+        mode_flags.append("无限资源")
+    if state.full_speed:
+        mode_flags.append("极速建造")
+    mode_status = "、".join(mode_flags) if mode_flags else "无"
     return [
         "--- Admin Commands ---",
         "//help              Show all commands",
@@ -43,6 +49,11 @@ def _cmd_admin_help(state) -> list[str]:
         "//hide <tab>        Hide a tab (e.g. //hide build)",
         "//show <tab>        Show a tab (e.g. //show build)",
         "//tabs              List visible tabs",
+        "//i am infinite     无限资源 — 无视资源消耗与上限",
+        "//full speed        极速建造 — 所有等待时间归零",
+        "//it is enough      退出所有管理员状态",
+        "//i am 42           开启所有管理员状态",
+        f"当前管理模式: {mode_status}",
     ]
 
 
@@ -92,6 +103,43 @@ def _cmd_tabs(state) -> list[str]:
     return [f"Visible tabs: {', '.join(names) if names else '(none)'}"]
 
 
+def _cmd_infinite(state) -> list[str]:
+    state.infinite_resources = True
+    return ["[管理模式] 无限资源已开启 — 无视所有资源消耗与上限。"]
+
+
+def _cmd_full_speed(state) -> list[str]:
+    state.full_speed = True
+    # fast-forward all in-progress constructions
+    count = 0
+    for floor in state.floors:
+        for slot in floor:
+            if slot.get("action_type") and slot.get("build_end_time") is not None:
+                slot["build_end_time"] = 0
+                count += 1
+    return [f"[管理模式] 极速建造已开启 — 所有等待时间归零，{count} 个在建项目即刻完成。"]
+
+
+def _cmd_enough(state) -> list[str]:
+    state.infinite_resources = False
+    state.full_speed = False
+    return ["[管理模式] 已退出所有管理员状态。"]
+
+
+def _cmd_i_am_42(state) -> list[str]:
+    state.infinite_resources = True
+    state.full_speed = True
+    # fast-forward all in-progress constructions
+    count = 0
+    for floor in state.floors:
+        for slot in floor:
+            if slot.get("action_type") and slot.get("build_end_time") is not None:
+                slot["build_end_time"] = 0
+                count += 1
+    return ["[管理模式] 已开启全部管理员状态：无限资源 + 极速建造。",
+            f"{count} 个在建项目即刻完成。"]
+
+
 # player command table
 PLAYER_COMMANDS = {
     "help": _cmd_help,
@@ -112,6 +160,19 @@ def _execute(text: str, state) -> list[str]:
     """Parse and execute a command, returning output lines."""
     if text.startswith("//"):
         rest = text[2:].strip()
+        rest_lower = rest.lower()
+
+        # multi-word admin commands
+        if rest_lower == "i am infinite":
+            return _cmd_infinite(state)
+        if rest_lower == "full speed":
+            return _cmd_full_speed(state)
+        if rest_lower == "it is enough":
+            return _cmd_enough(state)
+        if rest_lower == "i am 42":
+            return _cmd_i_am_42(state)
+
+        # single-word admin commands
         parts = rest.split(None, 1)
         cmd = parts[0].lower() if parts else ""
         args = parts[1] if len(parts) > 1 else ""

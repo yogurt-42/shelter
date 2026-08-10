@@ -13,6 +13,12 @@ def tick(state) -> list[str]:
     if dt <= 0:
         return []
 
+    # --- admin: infinite resources = skip all deductions ----
+    if getattr(state, "infinite_resources", False):
+        state.last_resource_tick = now
+        _clamp_resources(state)
+        return []
+
     # --- A. baseline scrap ----
     state.scrap += BASE_SCRAP_PER_SEC * dt
 
