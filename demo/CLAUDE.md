@@ -7,8 +7,8 @@ Chinese player-facing text, English codebase.
 ## Quickstart
 
 ```bash
-cd D:/project_s/demo && python -m shelter.main          # launch game
-cd D:/project_s/demo && python -c "from shelter.game_state import GameState; ..."  # REPL testing
+cd D:/shelter/demo && python -m shelter.main          # launch game
+cd D:/shelter/demo && python -c "from shelter.game_state import GameState; ..."  # REPL testing
 ```
 
 ## Tech
@@ -58,6 +58,7 @@ Key fields:
 |-------|--------|
 | Tabs | `active_tab: int`, `visible_tabs: set[int]` |
 | Resources | `power, water, food, scrap: float` + `max_power, max_water, max_food` |
+| Admin flags | `infinite_resources: bool`, `full_speed: bool` |
 | Population | `population: int`, `job_assignment: dict[str,int]` (job_type→workers) |
 | Floors | `floors: list[list[dict]]` — 5 floors × 6 rooms, each slot: `{state, room_type, level, ruin_type, build_end_time, action_type}` |
 | UI state | `console_input`, `console_history`, `logs`, `log_scroll_offset`, `build_view_offset_x/y` |
@@ -168,6 +169,13 @@ INITIAL_POPULATION=5, INITIAL_SCRAP=200, INITIAL_POWER=100
 ### A new command
 - Player (`/`): add to PLAYER_COMMANDS dict in `ui/console.py`
 - Admin (`//`): add to ADMIN_COMMANDS dict in `ui/console.py`
+- Multi-word admin commands (e.g. `//i am infinite`): add to the multi-word check block
+  at the top of `_execute()` before the single-word parsing
+
+### A new admin mode
+1. `game_state.py`: add a bool flag field to GameState dataclass
+2. `ui/console.py`: add command handler + register in `_execute()`
+3. Wire the flag into the relevant system (resource checks, construction timers, etc.)
 
 ### A new resource
 1. `config.py`: add INITIAL_X and INITIAL_MAX_X
