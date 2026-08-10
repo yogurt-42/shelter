@@ -7,8 +7,8 @@ Chinese player-facing text, English codebase.
 ## Quickstart
 
 ```bash
-cd D:/shelter/demo && python -m shelter.main          # launch game
-cd D:/shelter/demo && python -c "from shelter.game_state import GameState; ..."  # REPL testing
+cd D:/shelter && python -m shelter.main          # launch game
+cd D:/shelter && python -c "from shelter.game_state import GameState; ..."  # REPL testing
 ```
 
 ## Tech
