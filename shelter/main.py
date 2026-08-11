@@ -16,13 +16,15 @@ from shelter.config import (
     TAB_STATUS,
     TAB_BUILD,
     TAB_POPULATION,
+    TAB_MATERIALS,
     ROOM_STATE_BUILDING,
     ROOM_STATE_CLEARING,
 )
 from shelter.game_state import GameState
+from shelter.save_system import list_saves
 from shelter.systems import resource_system, event_system
 from shelter.ui.renderer import draw_all
-from shelter.ui import tab_bar, build_tab, status_tab, console, popup, population_tab
+from shelter.ui import tab_bar, build_tab, status_tab, console, popup, population_tab, materials_tab
 
 
 def _next_visible_tab(state) -> int:
@@ -109,6 +111,11 @@ def main():
     fonts = init_fonts()
     state = GameState()
 
+    # notify if save files exist
+    saves = list_saves()
+    if saves:
+        state.add_log(f"检测到 {len(saves)} 个存档。输入 /saves 查看，/load [槽位] 读取。")
+
     running = True
     while running:
         dt = clock.tick(FPS)
@@ -133,6 +140,8 @@ def main():
                         build_tab.handle_mouse_down(pos, state)
                     elif state.active_tab == TAB_POPULATION:
                         population_tab.handle_click(pos, state)
+                    elif state.active_tab == TAB_MATERIALS:
+                        materials_tab.handle_click(pos, state)
 
                 elif event.button == 3:  # right click
                     if state.active_tab == TAB_BUILD:

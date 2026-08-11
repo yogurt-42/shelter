@@ -16,8 +16,9 @@ from shelter.config import (
     TAB_STATUS,
     TAB_BUILD,
     TAB_POPULATION,
+    TAB_MATERIALS,
 )
-from shelter.ui import tab_bar, resource_bar, status_tab, build_tab, console, popup, population_tab
+from shelter.ui import tab_bar, resource_bar, status_tab, build_tab, console, popup, population_tab, materials_tab
 
 
 def _draw_mini_log(surface: pygame.Surface, state, fonts: dict):
@@ -62,6 +63,9 @@ def draw_all(surface: pygame.Surface, state, fonts: dict):
         _draw_mini_log(surface, state, fonts)
     elif state.active_tab == TAB_POPULATION:
         population_tab.draw(surface, state, fonts)
+        _draw_mini_log(surface, state, fonts)
+    elif state.active_tab == TAB_MATERIALS:
+        materials_tab.draw(surface, state, fonts)
         _draw_mini_log(surface, state, fonts)
 
     # 4. command console (always visible)

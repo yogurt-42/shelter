@@ -65,14 +65,17 @@ def _add_resource(state, key: str, amount: float):
         "power": ("power", "max_power"),
         "water": ("water", "max_water"),
         "food": ("food", "max_food"),
-        "scrap": ("scrap", None),
+        "scrap": ("scrap", "max_scrap"),
     }
     entry = mapping.get(key)
     if not entry:
         return
     attr, max_attr = entry
     val = getattr(state, attr)
-    setattr(state, attr, max(0, val + amount))
+    new_val = val + amount
+    if max_attr is not None:
+        new_val = min(new_val, getattr(state, max_attr))
+    setattr(state, attr, max(0, new_val))
 
 
 def _clamp_resources(state):
@@ -81,6 +84,7 @@ def _clamp_resources(state):
         ("power", "max_power"),
         ("water", "max_water"),
         ("food", "max_food"),
+        ("scrap", "max_scrap"),
     ]:
         cap = getattr(state, max_attr)
         current = getattr(state, attr)

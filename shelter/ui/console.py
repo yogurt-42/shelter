@@ -1,6 +1,7 @@
 """Shelter UI — bottom command console. Supports /player and //admin commands."""
 
 import pygame
+from shelter.save_system import save_game, load_game, list_saves, delete_save
 from shelter.config import (
     WINDOW_WIDTH,
     WINDOW_HEIGHT,
@@ -8,6 +9,7 @@ from shelter.config import (
     TAB_STATUS,
     TAB_BUILD,
     TAB_POPULATION,
+    TAB_MATERIALS,
     COLOR_CONSOLE_BG,
     COLOR_CONSOLE_PROMPT,
     COLOR_CONSOLE_TEXT,
@@ -19,17 +21,22 @@ from shelter.config import (
 CURSOR_BLINK_MS = 530
 
 # tab name -> key mapping
-TAB_NAME_MAP = {"status": TAB_STATUS, "build": TAB_BUILD, "population": TAB_POPULATION}
-TAB_KEY_NAME = {TAB_STATUS: "status", TAB_BUILD: "build", TAB_POPULATION: "population"}
+TAB_NAME_MAP = {"status": TAB_STATUS, "build": TAB_BUILD, "population": TAB_POPULATION, "materials": TAB_MATERIALS}
+TAB_KEY_NAME = {TAB_STATUS: "status", TAB_BUILD: "build", TAB_POPULATION: "population", TAB_MATERIALS: "materials"}
 
 
 # ---- command handlers ----
 
 def _cmd_help(state) -> list[str]:
+    saves = list_saves()
+    save_info = f"（已有 {len(saves)} 个存档）" if saves else "（暂无存档）"
     return [
         "--- Available Commands ---",
         "/help    Show this help",
         "/status  Show resource summary",
+        f"/saves   List save files {save_info}",
+        "/save [slot]  Save game to slot (default slot 1)",
+        "/load [slot]  Load game from slot (default slot 1)",
         "--- Tip ---",
         'Commands starting with "//" are admin commands. Type //help for more.',
     ]
@@ -49,6 +56,7 @@ def _cmd_admin_help(state) -> list[str]:
         "//hide <tab>        Hide a tab (e.g. //hide build)",
         "//show <tab>        Show a tab (e.g. //show build)",
         "//tabs              List visible tabs",
+        "//give <item> [n]  获得测试物品（管理测试用）",
         "//i am infinite     无限资源 — 无视资源消耗与上限",
         "//full speed        极速建造 — 所有等待时间归零",
         "//it is enough      退出所有管理员状态",
@@ -65,6 +73,44 @@ def _cmd_status(state) -> list[str]:
         f"废料: {int(state.scrap)}",
         f"运行时间: {state.elapsed_days}天{state.elapsed_hours}时{state.elapsed_minutes}分",
     ]
+
+
+def _cmd_save(state, args: str) -> list[str]:
+    try:
+        slot = int(args.strip()) if args.strip() else 1
+    except ValueError:
+        return [f"无效槽位: {args.strip()}（请输入 1-3 的数字）"]
+    msg = save_game(state, slot)
+    return [msg]
+
+
+def _cmd_load(state, args: str) -> list[str]:
+    try:
+        slot = int(args.strip()) if args.strip() else 1
+    except ValueError:
+        return [f"无效槽位: {args.strip()}（请输入 1-3 的数字）"]
+    loaded = load_game(slot)
+    if loaded is None:
+        return [f"槽位 {slot} 无存档。"]
+    # Replace current state fields with loaded state
+    for fld in loaded.__dataclass_fields__:
+        setattr(state, fld, getattr(loaded, fld))
+    return [f"已从槽位 {slot} 读取存档。"]
+
+
+def _cmd_saves(state, args: str) -> list[str]:
+    saves = list_saves()
+    if not saves:
+        return ["暂无存档。使用 /save [槽位] 保存进度。"]
+    lines = [f"--- 存档列表 (共 {len(saves)} 个) ---"]
+    for s in saves:
+        lines.append(
+            f"槽位 {s['slot']}: "
+            f"人口 {s['population']} | "
+            f"游戏时间 {s['game_days']}天{s['game_hours']}时{s['game_minutes']}分 | "
+            f"保存于 {s['saved_at']}"
+        )
+    return lines
 
 
 def _cmd_clear(state) -> list[str]:
@@ -126,6 +172,28 @@ def _cmd_enough(state) -> list[str]:
     return ["[管理模式] 已退出所有管理员状态。"]
 
 
+def _cmd_give(state, args: str) -> list[str]:
+    """Admin command: //give <item_key> [count] — add items for testing."""
+    parts = args.strip().split()
+    if not parts:
+        return ["用法：//give <物品key> [数量]"]
+    item_key = parts[0]
+    count = 1
+    if len(parts) > 1:
+        try:
+            count = int(parts[1])
+        except ValueError:
+            return [f"无效数量: {parts[1]}"]
+    from shelter.data.items import get_item
+    item = get_item(item_key)
+    if item is None:
+        return [f"未知物品: {item_key}"]
+    added = state.add_item(item_key, count)
+    if added == 0:
+        return ["物品栏已满，无法添加。"]
+    return [f"获得 {item['name']} x{added}（物品占用 {state.total_item_slots()}/{state.max_items}）"]
+
+
 def _cmd_i_am_42(state) -> list[str]:
     state.infinite_resources = True
     state.full_speed = True
@@ -153,6 +221,7 @@ ADMIN_COMMANDS = {
     "hide": (lambda s, a: _cmd_hide(s, a), True),
     "show": (lambda s, a: _cmd_show(s, a), True),
     "tabs": (lambda s, a: _cmd_tabs(s), False),
+    "give": (lambda s, a: _cmd_give(s, a), True),
 }
 
 
@@ -188,6 +257,14 @@ def _execute(text: str, state) -> list[str]:
         parts = rest.split(None, 1)
         cmd = parts[0].lower() if parts else ""
         args = parts[1] if len(parts) > 1 else ""
+
+        # save commands
+        if cmd == "save":
+            return _cmd_save(state, args)
+        if cmd == "load":
+            return _cmd_load(state, args)
+        if cmd == "saves":
+            return _cmd_saves(state, args)
 
         handler = PLAYER_COMMANDS.get(cmd)
         if handler is None:

@@ -88,6 +88,45 @@
 - `console.py`：支持多词命令匹配（`i am infinite`、`full speed` 等）
 - `+`/`-` 按钮改为 `pygame.draw.rect` 绘制的图形符号，彻底消除字体依赖
 
+## 步骤 5.3 — 存档系统
+
+实现 pickle 序列化存档，3 个槽位，文件保存在 `saves/slot_N.sav`。
+
+**新增文件**：`shelter/save_system.py`
+- `save_game(state, slot)` — 序列化 GameState + 元数据
+- `load_game(slot)` — 反序列化，重置计时器
+- `list_saves()` — 扫描所有槽位返回元数据
+- `delete_save(slot)` — 删除存档文件
+
+**新增命令**：`/save [slot]`、`/load [slot]`、`/saves`
+
+**实现细节**：
+- `/load` 通过 `__dict__` 原地替换当前 state，保持引用不变
+- `load_game` 自动重置 `start_time` / `last_resource_tick` / `last_event_time` 避免时间跳跃
+- 启动时检测现有存档，有则日志提示
+- 后续计划：设置标签页（TAB_SETTINGS）提供图形化存档管理
+
+## 步骤 6 — 物资系统
+
+新增"物资"标签页，将资源与物品分离显示与管理。
+
+**资源侧：**
+- 为废料补充独立上限 `max_scrap`，初始 `INITIAL_MAX_SCRAP=300`
+- 仓库/大型仓库建造完成后通过 `on_built_effect` 提升废料上限（+50 / +100）
+- `resource_system.py` 的 `_add_resource()` 与 `_clamp_resources()` 统一处理废料上限
+
+**物品侧：**
+- 新增文件 `shelter/data/items.py`：定义 `ITEM_DEFINITIONS`，先加入 `test_item_a` / `test_item_b`
+- `GameState` 新增 `items: dict[str,int]` 与 `max_items: int`（共享格子上限，初始 20）
+- `GameState.total_item_slots()` / `can_add_item()` / `add_item()` / `remove_item()` 方法
+- 废墟清理完成时按 `rewards` 发放物品；物品栏满时部分奖励丢失并日志提示
+- 新增管理员测试命令 `//give <item_key> [count]`
+
+**UI 侧：**
+- 新增 `shelter/ui/materials_tab.py`：上半显示 4 资源 `x / y`，分隔线后显示物品 `a / b` 与物品列表
+- 注册新标签 `TAB_MATERIALS=3`，默认可见，支持点击切换与 `TAB` 键循环
+- 更新 `main.py` 鼠标点击路由、`renderer.py` 绘制分支、`console.py` 标签名映射
+
 ---
 
 ## 技术决策记录

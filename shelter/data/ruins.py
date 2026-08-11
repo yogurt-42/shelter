@@ -12,6 +12,7 @@ RUIN_TYPES = {
         "clear_cost": {"scrap": 30},
         "clear_time": 10,
         "conditions": [],
+        "rewards": [{"item": "test_item_a", "count": 1}],
     },
     "heavy_rubble": {
         "key": "heavy_rubble",
@@ -20,6 +21,7 @@ RUIN_TYPES = {
         "clear_cost": {"scrap": 80},
         "clear_time": 30,
         "conditions": [],
+        "rewards": [{"item": "test_item_a", "count": 2}],
     },
     "faulty_machinery": {
         "key": "faulty_machinery",
@@ -28,6 +30,7 @@ RUIN_TYPES = {
         "clear_cost": {"scrap": 60, "water": 30},
         "clear_time": 20,
         "conditions": [],
+        "rewards": [{"item": "test_item_b", "count": 1}],
     },
     "sealed_door": {
         "key": "sealed_door",
@@ -38,6 +41,7 @@ RUIN_TYPES = {
         "conditions": [
             {"type": "stat_check", "min_total_power": 50},
         ],
+        "rewards": [{"item": "test_item_a", "count": 1}, {"item": "test_item_b", "count": 1}],
     },
     "biohazard": {
         "key": "biohazard",
@@ -48,6 +52,7 @@ RUIN_TYPES = {
         "conditions": [
             {"type": "has_room", "room_type": "water_purifier"},
         ],
+        "rewards": [{"item": "test_item_b", "count": 2}],
     },
 }
 

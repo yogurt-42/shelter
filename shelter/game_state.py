@@ -11,6 +11,8 @@ from shelter.config import (
     INITIAL_MAX_POWER,
     INITIAL_MAX_WATER,
     INITIAL_MAX_FOOD,
+    INITIAL_MAX_SCRAP,
+    INITIAL_MAX_ITEMS,
     INITIAL_POPULATION,
     MAX_LOG_ENTRIES,
     FLOORS,
@@ -23,6 +25,7 @@ from shelter.config import (
     TAB_STATUS,
     TAB_BUILD,
     TAB_POPULATION,
+    TAB_MATERIALS,
     EVENT_INTERVAL_MIN,
     EVENT_INTERVAL_MAX,
 )
@@ -46,7 +49,7 @@ class GameState:
 
     # ---- tabs ----
     active_tab: int = TAB_STATUS
-    visible_tabs: set = field(default_factory=lambda: {TAB_STATUS, TAB_BUILD, TAB_POPULATION})
+    visible_tabs: set = field(default_factory=lambda: {TAB_STATUS, TAB_BUILD, TAB_POPULATION, TAB_MATERIALS})
 
     # ---- resources ----
     power: float = INITIAL_POWER
@@ -56,6 +59,11 @@ class GameState:
     max_power: float = INITIAL_MAX_POWER
     max_water: float = INITIAL_MAX_WATER
     max_food: float = INITIAL_MAX_FOOD
+    max_scrap: float = INITIAL_MAX_SCRAP
+
+    # ---- items ----
+    items: dict = field(default_factory=dict)  # item_key -> count
+    max_items: int = INITIAL_MAX_ITEMS
 
     # ---- population ----
     population: int = INITIAL_POPULATION
@@ -163,11 +171,53 @@ class GameState:
             slot["state"] = ROOM_STATE_BUILT
             slot["level"] = 1
             slot["assigned_workers"] = 0
+            self._apply_build_effect(slot.get("room_type"))
         elif action == "clearing":
+            ruin_type = slot.get("ruin_type")
             slot["state"] = ROOM_STATE_EMPTY
             slot["ruin_type"] = None
+            self._award_ruin_rewards(ruin_type)
         slot["build_end_time"] = None
         slot["action_type"] = None
+
+    def _apply_build_effect(self, room_type: str | None):
+        """Apply one-time effects when a room finishes construction."""
+        if not room_type:
+            return
+        from shelter.data.rooms import get_room
+
+        tmpl = get_room(room_type)
+        if not tmpl:
+            return
+        effect = tmpl.get("on_built_effect")
+        if effect == "increase_scrap_cap_50":
+            self.max_scrap += 50
+            self.add_log(f"仓库扩容：废料上限 +50（当前 {int(self.max_scrap)}）")
+        elif effect == "increase_scrap_cap_100":
+            self.max_scrap += 100
+            self.add_log(f"大型仓库扩容：废料上限 +100（当前 {int(self.max_scrap)}）")
+
+    def _award_ruin_rewards(self, ruin_type: str | None):
+        """Award items when a ruin is cleared."""
+        if not ruin_type:
+            return
+        from shelter.data.ruins import RUIN_TYPES
+        from shelter.data.items import get_item
+
+        ruin_data = RUIN_TYPES.get(ruin_type)
+        if not ruin_data:
+            return
+        for reward in ruin_data.get("rewards", []):
+            item_key = reward.get("item")
+            count = reward.get("count", 1)
+            if not item_key or get_item(item_key) is None:
+                continue
+            added = self.add_item(item_key, count)
+            if added > 0:
+                item_name = get_item(item_key)["name"]
+                self.add_log(f"清理废墟获得：{item_name} x{added}")
+            if added < count:
+                self.add_log("物品栏已满，部分奖励已丢失。")
 
     # ---- population helpers ----
 
@@ -214,6 +264,42 @@ class GameState:
         if self.job_assignment[job_type] == 0:
             del self.job_assignment[job_type]
         return True
+
+    # ---- items ----
+
+    def total_item_slots(self) -> int:
+        """Total item slots currently occupied (each unit counts as one slot)."""
+        return sum(self.items.values())
+
+    def can_add_item(self, item_key: str, count: int = 1) -> bool:
+        """Check whether adding `count` units of item_key would exceed the shared cap."""
+        if count <= 0:
+            return True
+        return self.total_item_slots() + count <= self.max_items
+
+    def add_item(self, item_key: str, count: int = 1) -> int:
+        """Add items up to the shared cap. Returns the number actually added."""
+        from shelter.data.items import get_item
+
+        if count <= 0 or get_item(item_key) is None:
+            return 0
+        free = self.max_items - self.total_item_slots()
+        added = min(count, free)
+        if added > 0:
+            self.items[item_key] = self.items.get(item_key, 0) + added
+        return added
+
+    def remove_item(self, item_key: str, count: int = 1) -> int:
+        """Remove items, down to zero. Returns the number actually removed."""
+        if count <= 0:
+            return 0
+        current = self.items.get(item_key, 0)
+        removed = min(count, current)
+        if removed > 0:
+            self.items[item_key] = current - removed
+            if self.items[item_key] == 0:
+                del self.items[item_key]
+        return removed
 
     # ---- log ----
 

@@ -18,17 +18,19 @@ cd D:/shelter && python -c "from shelter.game_state import GameState; ..."  # RE
 - Font: SimHei (CJK) with Consolas fallback
 - 1100×700 window, 30 FPS, single-threaded game loop
 
-## Directory Map (~2600 LOC)
+## Directory Map (~2800 LOC)
 
 ```
 shelter/
 ├── main.py                     # entry: init pygame → event loop → tick → render
 ├── config.py                   # ALL constants (window, colors, fonts, layout, pacing)
 ├── game_state.py               # @dataclass GameState — single source of truth
+├── save_system.py              # pickle-based save/load, 3 slots, saves/ folder
 ├── data/                       # static definitions (read-only at runtime)
 │   ├── rooms.py                # ROOM_TEMPLATES dict, get_room(), list_buildable()
 │   ├── ruins.py                # RUIN_TYPES, can_clear(), evaluate_condition()
 │   ├── job_types.py            # JOB_DEFINITIONS, get_job()
+│   ├── items.py                # ITEM_DEFINITIONS, get_item(), list_items()
 │   └── events.py               # AMBIENT_EVENTS list (Chinese strings)
 ├── systems/                    # game logic, stateless, called per tick
 │   ├── resource_system.py      # tick(state) → job production + passive drain + base scrap
@@ -41,6 +43,7 @@ shelter/
     ├── status_tab.py           # log viewer with scroll
     ├── build_tab.py            # 5-floor × 6-room pannable map + drag + click routing
     ├── population_tab.py       # job-type aggregation, worker assignment
+    ├── materials_tab.py        # resources + items inventory display
     ├── console.py              # bottom command line, /player //admin parsing
     └── popup.py                # overlay: build/ruin/room-info/room-action popups
 ```
@@ -57,7 +60,8 @@ Key fields:
 | Group | Fields |
 |-------|--------|
 | Tabs | `active_tab: int`, `visible_tabs: set[int]` |
-| Resources | `power, water, food, scrap: float` + `max_power, max_water, max_food` |
+| Resources | `power, water, food, scrap: float` + `max_power, max_water, max_food, max_scrap` |
+| Items | `items: dict[str,int]` (item_key→count), `max_items: int` shared slot cap |
 | Admin flags | `infinite_resources: bool`, `full_speed: bool` |
 | Population | `population: int`, `job_assignment: dict[str,int]` (job_type→workers) |
 | Floors | `floors: list[list[dict]]` — 5 floors × 6 rooms, each slot: `{state, room_type, level, ruin_type, build_end_time, action_type}` |
@@ -135,12 +139,31 @@ Room slot dict: `{"state": int, "room_type": str|None, "level": int,
 ### Config Constants
 
 ```
-TAB_STATUS=0, TAB_BUILD=1, TAB_POPULATION=2
+TAB_STATUS=0, TAB_BUILD=1, TAB_POPULATION=2, TAB_MATERIALS=3
 ROOM_STATE_EMPTY=0, RUIN=1, BUILT=2, BUILDING=3, CLEARING=4
 FLOORS=5, ROOMS_PER_FLOOR=6
 POPUP_WIDTH=520, POPUP_MAX_HEIGHT=560
 INITIAL_POPULATION=5, INITIAL_SCRAP=200, INITIAL_POWER=100
+INITIAL_MAX_ITEMS=20
 ```
+
+### Save System (`save_system.py`)
+
+Pickle-based, 3 slots, saved to `saves/slot_N.sav` in project root.
+
+| Function | Purpose |
+|----------|---------|
+| `save_game(state, slot)` | Pickle entire GameState + metadata → file |
+| `load_game(slot)` | Read file → GameState (resets timers to now) |
+| `list_saves()` | Scan all slots → metadata dicts (no unpickle) |
+| `delete_save(slot)` | Remove one save file |
+
+Commands (registered in `console.py` `_execute`):
+- `/save [slot]` — default slot 1
+- `/load [slot]` — replaces current state in-place via `__dict__` copy
+- `/saves` — list all existing saves with game time, population, saved date
+
+Startup: `main.py` checks for saves and adds a reminder log line if any exist.
 
 ## How to Add...
 
@@ -184,6 +207,12 @@ INITIAL_POPULATION=5, INITIAL_SCRAP=200, INITIAL_POWER=100
 4. `systems/resource_system.py`: add to `_add_resource()` mapping + `_clamp_resources()`
 5. `ui/resource_bar.py`: add display
 6. `ui/popup.py`: add to `_res_cn()` mapping
+
+### A new item
+1. `data/items.py`: add entry to ITEM_DEFINITIONS with: key, name, description
+2. `data/ruins.py`: add `rewards` to a ruin type to make it obtainable, or add a
+   console/admin command to grant it
+3. `ui/materials_tab.py`: it will appear automatically in the item list
 
 ### A new popup type
 1. `ui/popup.py`: add `draw_xxx()` + `handle_xxx_click()`

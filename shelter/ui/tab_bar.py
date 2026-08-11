@@ -7,6 +7,7 @@ from shelter.config import (
     TAB_STATUS,
     TAB_BUILD,
     TAB_POPULATION,
+    TAB_MATERIALS,
     COLOR_BG,
     COLOR_BORDER,
     COLOR_TAB_ACTIVE_TEXT,
@@ -19,6 +20,7 @@ ALL_TABS = [
     (TAB_STATUS, "状态"),
     (TAB_BUILD, "建筑"),
     (TAB_POPULATION, "人口"),
+    (TAB_MATERIALS, "物资"),
 ]
 
 
