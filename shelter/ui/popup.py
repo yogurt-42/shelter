@@ -466,6 +466,7 @@ def handle_room_action_click(pos: tuple, state) -> bool:
                 slot["level"] = 1
                 slot["assigned_workers"] = 0
                 state.add_log(f"{old_name} 已拆除。")
+                state._refresh_vision()
             elif action_type == "upgrade":
                 cost = ut["build_cost"]
                 can, failures = _check_resources(state, cost)

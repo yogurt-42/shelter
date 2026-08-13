@@ -54,6 +54,28 @@ ROOM_TEMPLATES = {
         "downgrade_to": None,
         "on_built_effect": "increase_scrap_cap_50",
     },
+    "gate": {
+        "key": "gate",
+        "name": "避难所大门",
+        "description": "通往地表的坚固防爆门，是避难所的起点。",
+        "build_cost": {},
+        "build_time": 0,
+        "job_type": None,
+        "job_slots": 0,
+        "upgrades_to": [],
+        "downgrade_to": None,
+    },
+    "elevator": {
+        "key": "elevator",
+        "name": "电梯井",
+        "description": "连接上下层的垂直通道，维修后可提供跨层视野。",
+        "build_cost": {},
+        "build_time": 0,
+        "job_type": None,
+        "job_slots": 0,
+        "upgrades_to": [],
+        "downgrade_to": None,
+    },
 }
 
 # ---- upgrades ----

@@ -3,6 +3,7 @@
 import os
 import pickle
 import time
+import dataclasses
 from dataclasses import fields
 from shelter.game_state import GameState
 
@@ -47,6 +48,10 @@ def load_game(slot: int) -> GameState | None:
     with open(path, "rb") as f:
         data = pickle.load(f)
     state = data["state"]
+    # Ensure backward compatibility: add missing fields with defaults
+    for fld in fields(GameState):
+        if not hasattr(state, fld.name):
+            setattr(state, fld.name, fld.default_factory() if fld.default_factory is not dataclasses.MISSING else fld.default)
     # Adjust timing so game clock resumes from saved elapsed time
     state.start_time = time.time() - state.elapsed_seconds
     state.last_resource_tick = time.time()

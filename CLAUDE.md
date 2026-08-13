@@ -41,7 +41,7 @@ shelter/
     ├── tab_bar.py              # top tab strip, ALL_TABS registry, show/hide
     ├── resource_bar.py         # 4-resource row (power/water/food/scrap)
     ├── status_tab.py           # log viewer with scroll
-    ├── build_tab.py            # 5-floor × 6-room pannable map + drag + click routing
+    ├── build_tab.py            # 4-floor × 10-room pannable/zoomable map + drag + click routing
     ├── population_tab.py       # job-type aggregation, worker assignment
     ├── materials_tab.py        # resources + items inventory display
     ├── console.py              # bottom command line, /player //admin parsing
@@ -64,13 +64,14 @@ Key fields:
 | Items | `items: dict[str,int]` (item_key→count), `max_items: int` shared slot cap |
 | Admin flags | `infinite_resources: bool`, `full_speed: bool` |
 | Population | `population: int`, `job_assignment: dict[str,int]` (job_type→workers) |
-| Floors | `floors: list[list[dict]]` — 5 floors × 6 rooms, each slot: `{state, room_type, level, ruin_type, build_end_time, action_type}` |
+| Floors | `floors: list[list[dict]]` — 4 floors × 10 rooms, each slot: `{state, room_type, level, ruin_type, build_end_time, action_type, revealed, void}` |
 | UI state | `console_input`, `console_history`, `logs`, `log_scroll_offset`, `build_view_offset_x/y` |
 | Popup | `popup_type: str\|None`, `popup_floor`, `popup_room` |
 | Time | `elapsed_seconds`, `last_resource_tick`, `last_event_time` |
 
 Key methods: `open_popup()`, `close_popup()`, `start_building()`, `start_clearing()`,
-`complete_construction()`, `free_workers`, `total_job_slots(job_type)`,
+`complete_construction()`, `_propagate_vision()`, `_reveal_around()`, `_refresh_vision()`,
+`free_workers`, `total_job_slots(job_type)`,
 `assign_worker(job_type)`, `unassign_worker(job_type)`.
 
 ### Event Flow (main.py)
@@ -113,6 +114,7 @@ while running:
 Every tab module exposes:
 - `draw(surface, state, fonts)` — pure render
 - `handle_click(pos, state) -> bool` or `handle_mouse_down/up/motion`
+- Build tab additionally exposes `handle_wheel(y_offset, state) -> bool` for zoom
 - Console: `handle_key(event, state) -> bool`
 - Popup: `draw_xxx(surface, state, fonts)` + `handle_xxx_click(pos, state) -> bool`
 
@@ -124,8 +126,23 @@ RUIN(1) ──[clear click]──► CLEARING(4) ──[timer]──► EMPTY(0)
 BUILT(2) ──[right-click]──► upgrade / downgrade / demolish
 ```
 
+Some ruins define `clears_to: room_key` (e.g. `elevator_ruin` → `elevator`); when cleared
+they become `BUILT` with that `room_type` instead of `EMPTY`.
+
 Room slot dict: `{"state": int, "room_type": str|None, "level": int,
-"ruin_type": str|None, "build_end_time": float|None, "action_type": str|None}`
+"ruin_type": str|None, "build_end_time": float|None, "action_type": str|None,
+"revealed": bool, "void": bool}`
+
+### Vision / Fog of War
+
+- Each slot has `revealed` (player can see its real state) and `void` (no room at all).
+- `EMPTY` and `BUILT` rooms reveal their left/right neighbors on the same floor.
+- `elevator` rooms additionally reveal aligned elevator rooms directly above/below.
+- Non-elevator rooms above/below an elevator are **not** revealed by that elevator.
+- Clearing a ruin turns it into `EMPTY` (or a `BUILT` room via `clears_to`), which then
+  expands vision. This is the primary way to explore deeper.
+- `void` cells are never rendered or interactive.
+- Unrevealed cells draw as an empty box with no state info and ignore clicks.
 
 ### Job/Population Model
 
@@ -141,8 +158,9 @@ Room slot dict: `{"state": int, "room_type": str|None, "level": int,
 ```
 TAB_STATUS=0, TAB_BUILD=1, TAB_POPULATION=2, TAB_MATERIALS=3
 ROOM_STATE_EMPTY=0, RUIN=1, BUILT=2, BUILDING=3, CLEARING=4
-FLOORS=5, ROOMS_PER_FLOOR=6
+FLOORS=4, ROOMS_PER_FLOOR=10
 POPUP_WIDTH=520, POPUP_MAX_HEIGHT=560
+BUILD_ZOOM_MIN=0.5, BUILD_ZOOM_MAX=2.0, BUILD_ZOOM_STEP=0.1
 INITIAL_POPULATION=5, INITIAL_SCRAP=200, INITIAL_POWER=100
 INITIAL_MAX_ITEMS=20
 ```
@@ -185,9 +203,18 @@ Startup: `main.py` checks for saves and adds a reminder log line if any exist.
 
 ### A new ruin type
 1. `data/ruins.py`: add entry to RUIN_TYPES with: key, name, description,
-   clear_cost, clear_time, conditions[]
+   clear_cost, clear_time, conditions[], rewards[] (optional), clears_to (optional)
 2. Add conditions using types: `has_resources`, `has_room`, `stat_check`
-3. Assign to slots via INITIAL_RUIN_LAYOUT dict
+3. Assign to slots via `INITIAL_FLOOR_LAYOUT` in `data/ruins.py`
+
+### Edit the map layout
+1. Open `data/ruins.py` → `INITIAL_FLOOR_LAYOUT`
+2. Each floor is a list of cell specs of length `ROOMS_PER_FLOOR`; use `None` for void cells
+3. Cell spec formats:
+   - `{"state": ROOM_STATE_BUILT, "room_type": "...", "revealed": bool}`
+   - `{"state": ROOM_STATE_EMPTY, "revealed": bool}`
+   - `{"state": ROOM_STATE_RUIN, "ruin_type": "...", "revealed": bool}`
+4. Vision is auto-propagated at init and after any construction/clearing/demolish
 
 ### A new command
 - Player (`/`): add to PLAYER_COMMANDS dict in `ui/console.py`

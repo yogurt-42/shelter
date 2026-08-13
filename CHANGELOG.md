@@ -127,6 +127,38 @@
 - 注册新标签 `TAB_MATERIALS=3`，默认可见，支持点击切换与 `TAB` 键循环
 - 更新 `main.py` 鼠标点击路由、`renderer.py` 绘制分支、`console.py` 标签名映射
 
+## 步骤 7 — 地图扩大与视野系统
+
+按 `map.xlsx` 设计扩大地图并引入视野/迷雾机制。
+
+**地图尺寸：**
+- `FLOORS` 从 5 改为 4，`ROOMS_PER_FLOOR` 从 6 改为 10
+- 每层房间数可不等，空单元格用 `None` 表示 void
+- `BUILD_DRAG_LIMIT_X` 扩大至 800，保证 10 列地图可横向拖动
+
+**新房间/废墟：**
+- `data/rooms.py`：新增不可建造的 `gate`（避难所大门）与 `elevator`（电梯井）
+- `data/ruins.py`：新增 `elevator_ruin`（损坏电梯井），带 `clears_to: "elevator"`
+- 普通废墟增加可选 `clears_to` 字段；清理后可直接变为对应建成房间
+
+**视野规则：**
+- room slot 增加 `revealed`（已揭示）与 `void`（无房间）字段
+- `EMPTY` / `BUILT` 房间揭示同层左右邻居
+- `elevator` 房间额外揭示上下对齐的电梯房间；非电梯邻居不可见
+- 清理废墟后变为 `EMPTY`（或 `clears_to` 目标房间），从而继续扩展视野
+- `void` 单元格不渲染、不交互；未揭示单元格显示为空方框，不显示状态/废墟/条件
+
+**数据驱动布局：**
+- 移除固定的 `INITIAL_RUIN_LAYOUT`
+- 新增 `INITIAL_FLOOR_LAYOUT`，按楼层列出每个格子的初始状态与是否揭示
+- `GameState._init_floors()` 读取该表初始化；`GameState._propagate_vision()` 级联计算视野
+
+**UI 适配：**
+- `build_tab.py`：void 跳过绘制；未揭示格只画空方框；点击忽略未揭示/void
+- 建筑标签页支持鼠标滚轮缩放，范围 `0.5x ~ 2.0x`，拖动边界随缩放动态计算
+- 层数文字改为与房间单元格垂直居中对齐
+- `popup.py`：拆除房间后调用 `_refresh_vision()`
+
 ---
 
 ## 技术决策记录

@@ -159,6 +159,8 @@ def main():
             elif event.type == pygame.MOUSEWHEEL:
                 if state.active_tab == TAB_STATUS:
                     status_tab.handle_wheel(event.y, state)
+                elif state.active_tab == TAB_BUILD:
+                    build_tab.handle_wheel(event.y, state)
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:

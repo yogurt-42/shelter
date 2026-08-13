@@ -23,6 +23,8 @@ COLOR_BORDER_LIGHT = (100, 100, 100)
 COLOR_CELL_EMPTY_BG = (35, 35, 35)
 COLOR_CELL_RUIN_BG = (55, 55, 55)
 COLOR_CELL_BUILT_BG = (75, 75, 75)
+COLOR_CELL_HIDDEN_BG = (20, 20, 20)
+COLOR_CELL_HIDDEN_BORDER = (40, 40, 40)
 COLOR_CELL_HOVER_BORDER = (180, 180, 180)
 
 # Tab bar
@@ -63,8 +65,8 @@ MAIN_AREA_HEIGHT = WINDOW_HEIGHT - MAIN_AREA_Y - CONSOLE_HEIGHT
 # ============================================================
 # Map / build view
 # ============================================================
-FLOORS = 5
-ROOMS_PER_FLOOR = 6
+FLOORS = 4
+ROOMS_PER_FLOOR = 10
 ROOM_CELL_WIDTH = 140
 ROOM_CELL_HEIGHT = 58
 ROOM_CELL_PADDING = 6
@@ -126,7 +128,12 @@ MINI_LOG_BG = (12, 12, 12)
 # Build view drag limits
 # ============================================================
 BUILD_DRAG_LIMIT_Y = 150
-BUILD_DRAG_LIMIT_X = 600
+BUILD_DRAG_LIMIT_X = 800
+
+# Map zoom
+BUILD_ZOOM_MIN = 0.5
+BUILD_ZOOM_MAX = 2.0
+BUILD_ZOOM_STEP = 0.1
 
 # ============================================================
 # Base resource rates (per second, without rooms)

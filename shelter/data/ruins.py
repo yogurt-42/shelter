@@ -1,5 +1,11 @@
 """Shelter — ruin types with programmable clearance conditions."""
 
+from shelter.config import (
+    ROOM_STATE_EMPTY,
+    ROOM_STATE_RUIN,
+    ROOM_STATE_BUILT,
+)
+
 # ============================================================
 # Ruin type definitions
 # ============================================================
@@ -53,6 +59,16 @@ RUIN_TYPES = {
             {"type": "has_room", "room_type": "water_purifier"},
         ],
         "rewards": [{"item": "test_item_b", "count": 2}],
+    },
+    "elevator_ruin": {
+        "key": "elevator_ruin",
+        "name": "损坏的电梯井",
+        "description": "坍塌的电梯井，清理后可以恢复垂直通行。",
+        "clear_cost": {"scrap": 100, "power": 50},
+        "clear_time": 30,
+        "conditions": [],
+        "rewards": [{"item": "test_item_a", "count": 1}],
+        "clears_to": "elevator",
     },
 }
 
@@ -128,46 +144,54 @@ def _get_resource(state, key: str) -> float:
 
 
 # ============================================================
-# Ruin type assignment for initial floor layout
+# Initial floor layout
 # ============================================================
 
-# Ruin types assigned per (floor, room) when initializing.
-# Only applied to RUIN-state slots; EMPTY slots ignored.
-# Keys not listed default to "light_rubble".
+# Each floor is a list of cell specs. Length must match ROOMS_PER_FLOOR.
+# A cell spec is either:
+#   None                        — void (no room, no rendering, no interaction)
+#   {"state": ROOM_STATE_BUILT, "room_type": str, "revealed": bool}
+#   {"state": ROOM_STATE_EMPTY, "revealed": bool}
+#   {"state": ROOM_STATE_RUIN,  "ruin_type": str, "revealed": bool}
 
-INITIAL_RUIN_LAYOUT = {
-    # Floor 1 (surface): slots 3-5 are light rubble (default)
-    # Floor 2: mixed
-    (1, 0): "heavy_rubble",
-    (1, 1): "light_rubble",
-    (1, 2): "faulty_machinery",
-    (1, 3): "light_rubble",
-    (1, 4): "heavy_rubble",
-    (1, 5): "light_rubble",
-    # Floor 3: more severe
-    (2, 0): "faulty_machinery",
-    (2, 1): "sealed_door",
-    (2, 2): "heavy_rubble",
-    (2, 3): "faulty_machinery",
-    (2, 4): "heavy_rubble",
-    (2, 5): "sealed_door",
-    # Floor 4: hazardous
-    (3, 0): "heavy_rubble",
-    (3, 1): "biohazard",
-    (3, 2): "sealed_door",
-    (3, 3): "heavy_rubble",
-    (3, 4): "biohazard",
-    (3, 5): "faulty_machinery",
-    # Floor 5: deepest — worst
-    (4, 0): "biohazard",
-    (4, 1): "sealed_door",
-    (4, 2): "biohazard",
-    (4, 3): "heavy_rubble",
-    (4, 4): "biohazard",
-    (4, 5): "sealed_door",
+INITIAL_FLOOR_LAYOUT = {
+    # Floor 1 (surface): only the gate starts revealed; everything else is discovered by the player.
+    0: [
+        None,  # R1  void
+        {"state": ROOM_STATE_BUILT, "room_type": "gate", "revealed": True},  # R2 避难所大门
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R3
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R4
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R5
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R6
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R7
+        {"state": ROOM_STATE_RUIN, "ruin_type": "elevator_ruin", "revealed": False},  # R8 电梯废墟
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R9
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R10
+    ],
+    # Floor 2 (hidden until elevator connects)
+    1: [
+        None,  # R1 void
+        None,  # R2 void
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R3
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R4
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R5
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R6
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R7
+        {"state": ROOM_STATE_RUIN, "ruin_type": "elevator_ruin", "revealed": False},  # R8 电梯废墟
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R9
+        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R10
+    ],
+    # Floors 3-4: not yet designed
+    2: [],
+    3: [],
 }
 
 
-def get_ruin_for_slot(floor: int, room: int) -> str:
-    """Return the ruin type key for a given slot position."""
-    return INITIAL_RUIN_LAYOUT.get((floor, room), "light_rubble")
+def get_cell_spec(floor: int, room: int) -> dict | None:
+    """Return the initial cell spec for a given slot, or None for void."""
+    floor_spec = INITIAL_FLOOR_LAYOUT.get(floor)
+    if not floor_spec:
+        return None
+    if room < 0 or room >= len(floor_spec):
+        return None
+    return floor_spec[room]
