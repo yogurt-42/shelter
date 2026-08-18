@@ -95,3 +95,5 @@ def _draw_popup_overlay(surface: pygame.Surface, state, fonts: dict):
         popup.draw_room_info(surface, state, fonts)
     elif state.popup_type == "room_action":
         popup.draw_room_action(surface, state, fonts)
+    elif state.popup_type == "story":
+        popup.draw_story(surface, state, fonts)

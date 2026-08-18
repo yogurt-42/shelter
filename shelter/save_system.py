@@ -52,6 +52,33 @@ def load_game(slot: int) -> GameState | None:
     for fld in fields(GameState):
         if not hasattr(state, fld.name):
             setattr(state, fld.name, fld.default_factory() if fld.default_factory is not dataclasses.MISSING else fld.default)
+
+    # Migrate old intro_* fields to story_* fields (pre-2026-08-18 saves)
+    _intro_to_story = {
+        "intro_active": "story_active",
+        "intro_current_key": "story_current_key",
+        "intro_event_index": "story_event_index",
+        "intro_events": "story_events",
+        "intro_paused": "story_paused",
+        "intro_pause_tab": "story_pause_tab",
+        "intro_last_event_time": "story_last_event_time",
+        "intro_tutorial_title": "story_popup_title",
+        "intro_tutorial_text": "story_popup_text",
+    }
+    for old_key, new_key in _intro_to_story.items():
+        if hasattr(state, old_key) and not getattr(state, new_key, None):
+            old_val = getattr(state, old_key)
+            if old_val is not None:
+                setattr(state, new_key, old_val)
+    for default_key, default_val in [
+        ("story_popup_mode", "info"),
+        ("story_choices", None),
+        ("story_queue", []),
+        ("story_flags", {}),
+    ]:
+        if not hasattr(state, default_key):
+            setattr(state, default_key, default_val)
+
     # Adjust timing so game clock resumes from saved elapsed time
     state.start_time = time.time() - state.elapsed_seconds
     state.last_resource_tick = time.time()

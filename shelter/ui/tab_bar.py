@@ -43,19 +43,37 @@ def draw(surface: pygame.Surface, state, fonts: dict):
 
     for key, label in _visible_tab_list(state):
         is_active = (key == state.active_tab)
-        color = COLOR_TAB_ACTIVE_TEXT if is_active else COLOR_TAB_INACTIVE_TEXT
+        is_tutorial_target = (
+            getattr(state, "story_active", False)
+            and getattr(state, "story_paused", False)
+            and getattr(state, "story_pause_tab", None) == key
+        )
+        if is_active:
+            color = COLOR_TAB_ACTIVE_TEXT
+        elif is_tutorial_target:
+            color = (255, 220, 120)  # warm highlight for required click
+        else:
+            color = COLOR_TAB_INACTIVE_TEXT
 
         text = f"[ {label} ]"
         text_surf = font.render(text, True, color)
         surface.blit(text_surf, (x, 6))
 
-        if is_active:
+        if is_active or is_tutorial_target:
             tw = text_surf.get_width()
             pygame.draw.line(
                 surface, COLOR_TAB_ACTIVE_UNDERLINE,
                 (x, TAB_BAR_HEIGHT - 4), (x + tw, TAB_BAR_HEIGHT - 4),
                 width=2,
             )
+            if is_tutorial_target:
+                # extra box outline to draw attention
+                pygame.draw.rect(
+                    surface, (255, 220, 120),
+                    (x - 2, 4, tw + 4, TAB_BAR_HEIGHT - 8),
+                    width=1,
+                    border_radius=2,
+                )
 
         x += text_surf.get_width() + 20
 

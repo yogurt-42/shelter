@@ -1,4 +1,4 @@
-"""Shelter UI — popup overlay system (build / ruin / room info / room action)."""
+"""Shelter UI — popup overlay system (build / ruin / room info / room action / tutorial)."""
 
 import pygame
 from shelter.config import (
@@ -15,6 +15,7 @@ from shelter.config import (
     FONT_SIZE_SMALL,
     FONT_SIZE_NORMAL,
 )
+from shelter.systems import room_system
 
 POPUP_BG = (22, 22, 22)
 POPUP_HEADER_BG = (30, 30, 30)
@@ -82,7 +83,7 @@ def draw_build(surface: pygame.Surface, state, fonts: dict):
     """Draw the room construction selection popup — card layout."""
     from shelter.data.rooms import list_buildable
 
-    rooms = list_buildable()
+    rooms = list_buildable(state)
     n = len(rooms)
     content_h = 36 + 6 + n * BUILD_ENTRY_HEIGHT + 12
     rect = _popup_rect(content_h)
@@ -109,7 +110,7 @@ def draw_build(surface: pygame.Surface, state, fonts: dict):
         surface.blit(name_surf, (title_rect.x + 4, title_rect.y + 6))
 
         # cost + time (right-aligned)
-        cost_str = _cost_cn(tmpl["build_cost"])
+        cost_str = room_system._cost_cn(tmpl["build_cost"])
         meta_text = f"[{cost_str}]  {tmpl['build_time']}s"
         meta_surf = font.render(meta_text, True, COLOR_TEXT_MID)
         surface.blit(meta_surf, (title_rect.right - meta_surf.get_width() - 4, title_rect.y + 6))
@@ -129,7 +130,7 @@ def handle_build_click(pos: tuple, state) -> bool:
     """Handle click inside the build popup. Returns True if an action was taken."""
     from shelter.data.rooms import list_buildable
 
-    rooms = list_buildable()
+    rooms = list_buildable(state)
     n = len(rooms)
     content_h = 36 + 6 + n * BUILD_ENTRY_HEIGHT + 12
     rect = _popup_rect(content_h)
@@ -146,16 +147,15 @@ def handle_build_click(pos: tuple, state) -> bool:
         title_rect = pygame.Rect(rect.x + 8, entry_top, rect.width - 16, POPUP_ROW_HEIGHT)
         if title_rect.collidepoint(x, y):
             cost = tmpl["build_cost"]
-            can, failures = _check_resources(state, cost)
+            can, failures = room_system.check_resources(state, cost)
             if not can:
                 for msg in failures:
                     state.add_log(msg)
                 state.close_popup()
                 return True
-            for res_key, amount in cost.items():
-                _deduct_resource(state, res_key, amount)
-            state.start_building(state.popup_floor, state.popup_room,
-                                 tmpl["key"], tmpl["build_time"])
+            room_system.deduct_resources(state, cost)
+            room_system.start_building(state, state.popup_floor, state.popup_room,
+                                       tmpl["key"], tmpl["build_time"])
             state.add_log(f"开始建造 {tmpl['name']}，预计 {tmpl['build_time']} 秒后完工。")
             state.close_popup()
             return True
@@ -193,7 +193,7 @@ def draw_ruin_info(surface: pygame.Surface, state, fonts: dict):
     _text_row(surface, rect, start_y, row, ruin["description"], font, COLOR_TEXT_DIM); row += 1
     row += 0  # spacer
     # cost
-    cost_str = _cost_cn(ruin["clear_cost"])
+    cost_str = room_system._cost_cn(ruin["clear_cost"])
     _text_row(surface, rect, start_y, row,
               f"清理成本: {cost_str}   耗时: {ruin['clear_time']}s",
               font, COLOR_TEXT_BRIGHT); row += 1
@@ -257,15 +257,14 @@ def handle_ruin_info_click(pos: tuple, state) -> bool:
     btn_rect = pygame.Rect(rect.x + 12, btn_y, rect.width - 24, POPUP_ROW_HEIGHT)
     if btn_rect.collidepoint(x, y):
         cost = ruin["clear_cost"]
-        can, failures = _check_resources(state, cost)
+        can, failures = room_system.check_resources(state, cost)
         if not can:
             for msg in failures:
                 state.add_log(msg)
             state.close_popup()
             return True
-        for res_key, amount in cost.items():
-            _deduct_resource(state, res_key, amount)
-        state.start_clearing(state.popup_floor, state.popup_room, ruin["clear_time"])
+        room_system.deduct_resources(state, cost)
+        room_system.start_clearing(state, state.popup_floor, state.popup_room, ruin["clear_time"])
         state.add_log(f"开始清理 {ruin['name']}，预计 {ruin['clear_time']} 秒后完成。")
         state.close_popup()
         return True
@@ -311,8 +310,8 @@ def draw_room_info(surface: pygame.Surface, state, fonts: dict):
         _text_row(surface, rect, start_y, row,
                   f"岗位: {job_name}  {current}/{job_slots}", font, COLOR_TEXT_BRIGHT); row += 1
 
-        prod_parts = [f"{_res_cn(k)}+{v}/s/人" for k, v in jt.get("production", {}).items()]
-        cons_parts = [f"{_res_cn(k)}-{v}/s/人" for k, v in jt.get("consumption", {}).items()]
+        prod_parts = [f"{room_system._res_cn(k)}+{v}/s/人" for k, v in jt.get("production", {}).items()]
+        cons_parts = [f"{room_system._res_cn(k)}-{v}/s/人" for k, v in jt.get("consumption", {}).items()]
         rate_text = "  ".join(prod_parts + cons_parts)
         if rate_text:
             _text_row(surface, rect, start_y, row, rate_text, font, COLOR_TEXT_MID); row += 1
@@ -320,9 +319,9 @@ def draw_room_info(surface: pygame.Surface, state, fonts: dict):
         # passive room (no workers)
         parts = []
         for k, v in tmpl.get("passive_production", {}).items():
-            parts.append(f"{_res_cn(k)}+{v}/s")
+            parts.append(f"{room_system._res_cn(k)}+{v}/s")
         for k, v in tmpl.get("passive_consumption", {}).items():
-            parts.append(f"{_res_cn(k)}-{v}/s")
+            parts.append(f"{room_system._res_cn(k)}-{v}/s")
         if parts:
             _text_row(surface, rect, start_y, row,
                       f"被动: {'  '.join(parts)}", font, COLOR_TEXT_MID); row += 1
@@ -359,33 +358,19 @@ def handle_room_info_click(pos: tuple, state) -> bool:
 # Room action popup (right-click built slot)
 # ============================================================
 
+# each action = 2 rows (title + subtitle)
+ACTION_ENTRY_H = POPUP_ROW_HEIGHT * 2 + POPUP_CARD_GAP
+
+
 def draw_room_action(surface: pygame.Surface, state, fonts: dict):
     """Draw right-click action menu for a built room."""
-    from shelter.data.rooms import get_room
-
     slot = state.get_room_slot(state.popup_floor, state.popup_room)
+    from shelter.data.rooms import get_room
     tmpl = get_room(slot.get("room_type", ""))
     if not tmpl:
         return
 
-    actions = []
-    for uk in tmpl.get("upgrades_to", []):
-        ut = get_room(uk)
-        if ut:
-            cost_str = _cost_cn(ut["build_cost"])
-            actions.append(("upgrade", uk,
-                            f"升级 -> {ut['name']}",
-                            f"费用: {cost_str}"))
-    if tmpl.get("downgrade_to"):
-        dt = get_room(tmpl["downgrade_to"])
-        if dt:
-            actions.append(("downgrade", tmpl["downgrade_to"],
-                            f"降级 -> {dt['name']}",
-                            "无消耗"))
-    actions.append(("demolish", None, "拆除", "移除房间，无返还"))
-
-    # each action = 2 rows (title + subtitle)
-    ACTION_ENTRY_H = POPUP_ROW_HEIGHT * 2 + POPUP_CARD_GAP
+    actions = room_system.get_upgrade_options(state, state.popup_floor, state.popup_room)
     n = len(actions)
     content_h = 36 + 6 + n * ACTION_ENTRY_H + 12
     rect = _popup_rect(content_h)
@@ -397,7 +382,7 @@ def draw_room_action(surface: pygame.Surface, state, fonts: dict):
     mouse_x, mouse_y = pygame.mouse.get_pos()
     start_y = _content_start_y(rect)
 
-    for i, (action_type, action_key, label, subtext) in enumerate(actions):
+    for i, action in enumerate(actions):
         entry_top = start_y + i * ACTION_ENTRY_H
 
         # title row
@@ -407,14 +392,14 @@ def draw_room_action(surface: pygame.Surface, state, fonts: dict):
             pygame.draw.rect(surface, POPUP_ROW_HOVER, title_rect, border_radius=2)
 
         title_color = COLOR_TEXT_BRIGHT
-        if action_type == "demolish":
+        if action["action_type"] == "demolish":
             title_color = (200, 100, 100)  # dim red for demolish
-        title_surf = font.render(label, True, title_color)
+        title_surf = font.render(action["label"], True, title_color)
         surface.blit(title_surf, (title_rect.x + 4, title_rect.y + 6))
 
         # subtext row
         sub_y = entry_top + POPUP_ROW_HEIGHT
-        sub_surf = font.render(subtext, True, COLOR_TEXT_DIM)
+        sub_surf = font.render(action["subtext"], True, COLOR_TEXT_DIM)
         surface.blit(sub_surf, (rect.x + 16, sub_y + 6))
 
         if i < n - 1:
@@ -424,26 +409,14 @@ def draw_room_action(surface: pygame.Surface, state, fonts: dict):
 
 def handle_room_action_click(pos: tuple, state) -> bool:
     """Handle click inside the room action popup."""
-    from shelter.data.rooms import get_room
-
     slot = state.get_room_slot(state.popup_floor, state.popup_room)
+    from shelter.data.rooms import get_room
     tmpl = get_room(slot.get("room_type", ""))
     if not tmpl:
         state.close_popup()
         return False
 
-    actions = []
-    for uk in tmpl.get("upgrades_to", []):
-        ut = get_room(uk)
-        if ut:
-            actions.append(("upgrade", uk, ut))
-    if tmpl.get("downgrade_to"):
-        dt = get_room(tmpl["downgrade_to"])
-        if dt:
-            actions.append(("downgrade", tmpl["downgrade_to"], dt))
-    actions.append(("demolish", None, None))
-
-    ACTION_ENTRY_H = POPUP_ROW_HEIGHT * 2 + POPUP_CARD_GAP
+    actions = room_system.get_upgrade_options(state, state.popup_floor, state.popup_room)
     n = len(actions)
     content_h = 36 + 6 + n * ACTION_ENTRY_H + 12
     rect = _popup_rect(content_h)
@@ -455,33 +428,14 @@ def handle_room_action_click(pos: tuple, state) -> bool:
 
     start_y = _content_start_y(rect)
 
-    for i, (action_type, action_key, ut) in enumerate(actions):
+    for i, action in enumerate(actions):
         entry_top = start_y + i * ACTION_ENTRY_H
         title_rect = pygame.Rect(rect.x + 8, entry_top, rect.width - 16, POPUP_ROW_HEIGHT)
         if title_rect.collidepoint(x, y):
-            if action_type == "demolish":
-                old_name = tmpl["name"]
-                slot["state"] = 0
-                slot["room_type"] = None
-                slot["level"] = 1
-                slot["assigned_workers"] = 0
-                state.add_log(f"{old_name} 已拆除。")
-                state._refresh_vision()
-            elif action_type == "upgrade":
-                cost = ut["build_cost"]
-                can, failures = _check_resources(state, cost)
-                if can:
-                    for res_key, amount in cost.items():
-                        _deduct_resource(state, res_key, amount)
-                    slot["room_type"] = action_key
-                    slot["level"] += 1
-                    state.add_log(f"{tmpl['name']} 已升级为 {ut['name']}！")
-                else:
-                    for msg in failures:
-                        state.add_log(msg)
-            elif action_type == "downgrade":
-                slot["room_type"] = action_key
-                state.add_log(f"{tmpl['name']} 已降级为 {ut['name']}。")
+            room_system.apply_room_action(
+                state, state.popup_floor, state.popup_room,
+                action["action_type"], action["target_key"]
+            )
             state.close_popup()
             return True
 
@@ -490,8 +444,97 @@ def handle_room_action_click(pos: tuple, state) -> bool:
 
 
 # ============================================================
-# Shared helpers
+# Story popup (intro-driven info / choice panel)
 # ============================================================
+
+TUTORIAL_LINE_HEIGHT = 22
+CHOICE_LINE_HEIGHT = 26
+
+
+def draw_story(surface: pygame.Surface, state, fonts: dict):
+    """Draw a story popup: either info text or a list of choices."""
+    mode = getattr(state, "story_popup_mode", "info")
+    title = getattr(state, "story_popup_title", "")
+    text = getattr(state, "story_popup_text", "")
+    lines = text.split("\n") if text else []
+
+    if mode == "choice":
+        choices = getattr(state, "story_choices", []) or []
+        content_h = 36 + 16 + len(lines) * TUTORIAL_LINE_HEIGHT + 16 + len(choices) * CHOICE_LINE_HEIGHT + 42
+    else:
+        content_h = 36 + 16 + len(lines) * TUTORIAL_LINE_HEIGHT + 42
+
+    rect = _popup_rect(content_h)
+    _draw_popup_frame(surface, rect)
+    font = fonts["small"]
+    _draw_title(surface, rect, title, font)
+
+    start_y = _content_start_y(rect)
+    for i, line in enumerate(lines):
+        surf = font.render(line, True, COLOR_TEXT_BRIGHT)
+        surface.blit(surf, (rect.x + 16, start_y + i * TUTORIAL_LINE_HEIGHT))
+
+    if mode == "choice":
+        choices = getattr(state, "story_choices", []) or []
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        choice_y = start_y + len(lines) * TUTORIAL_LINE_HEIGHT + 16
+        for i, choice in enumerate(choices):
+            row_y = choice_y + i * CHOICE_LINE_HEIGHT
+            row_rect = pygame.Rect(rect.x + 16, row_y, rect.width - 32, CHOICE_LINE_HEIGHT - 4)
+            hover = row_rect.collidepoint(mouse_x, mouse_y)
+            bg = POPUP_ROW_HOVER if hover else (30, 30, 30)
+            pygame.draw.rect(surface, bg, row_rect, border_radius=2)
+            pygame.draw.rect(surface, COLOR_BORDER, row_rect, width=1, border_radius=2)
+            text_surf = font.render(f"{i + 1}. {choice.get('text', '')}", True, COLOR_TEXT_BRIGHT)
+            surface.blit(text_surf, (row_rect.x + 8, row_rect.y + 4))
+    else:
+        # close hint
+        hint = font.render("[ 点击任意处或按 Esc 关闭 ]", True, COLOR_TEXT_DIM)
+        hint_y = rect.bottom - 30
+        surface.blit(hint, (rect.centerx - hint.get_width() // 2, hint_y))
+
+
+def handle_story_click(pos: tuple, state) -> bool:
+    """Handle click inside a story popup. Info mode closes; choice mode selects."""
+    from shelter.systems import story_system
+
+    mode = getattr(state, "story_popup_mode", "info")
+    if mode == "choice":
+        # Determine which choice row was clicked.
+        title = getattr(state, "story_popup_title", "")
+        text = getattr(state, "story_popup_text", "")
+        lines = text.split("\n") if text else []
+        choices = getattr(state, "story_choices", []) or []
+        content_h = 36 + 16 + len(lines) * TUTORIAL_LINE_HEIGHT + 16 + len(choices) * CHOICE_LINE_HEIGHT + 42
+        rect = _popup_rect(content_h)
+        x, y = pos
+        if not rect.collidepoint(x, y):
+            return False
+        start_y = _content_start_y(rect)
+        choice_y = start_y + len(lines) * TUTORIAL_LINE_HEIGHT + 16
+        for i, _choice in enumerate(choices):
+            row_y = choice_y + i * CHOICE_LINE_HEIGHT
+            row_rect = pygame.Rect(rect.x + 16, row_y, rect.width - 32, CHOICE_LINE_HEIGHT - 4)
+            if row_rect.collidepoint(x, y):
+                story_system.choose(state, i)
+                return True
+        return False
+
+    # Info mode: close and resume.
+    state.close_popup()
+    story_system.resume_story(state)
+    return True
+
+
+def handle_tutorial_click(pos: tuple, state) -> bool:
+    """Deprecated alias; kept for compatibility."""
+    return handle_story_click(pos, state)
+
+
+def draw_tutorial(surface: pygame.Surface, state, fonts: dict):
+    """Deprecated alias; kept for compatibility."""
+    return draw_story(surface, state, fonts)
+
 
 def _text_row(surface: pygame.Surface, rect: pygame.Rect, start_y: int,
               row_idx: int, text: str, font, color=None):
@@ -502,51 +545,10 @@ def _text_row(surface: pygame.Surface, rect: pygame.Rect, start_y: int,
     surface.blit(surf, (rect.x + 14, y + 6))
 
 
-def _res_cn(key: str) -> str:
-    """Map resource key to Chinese display name."""
-    mapping = {"power": "电力", "water": "水", "food": "食物", "scrap": "废料"}
-    return mapping.get(key, key)
-
-
-def _cost_cn(cost: dict) -> str:
-    """Format a cost dict as Chinese string, e.g. '废料:80  电力:50'."""
-    return "  ".join(f"{_res_cn(k)}:{v}" for k, v in cost.items())
-
-
-def _check_resources(state, cost: dict) -> tuple:
-    """Check if state has enough resources for a cost dict.
-    Returns (can_afford: bool, list_of_failure_messages: list[str]).
-    """
-    if getattr(state, "infinite_resources", False):
-        return (True, [])
-    failures = []
-    for res_key, amount in cost.items():
-        current = _get_resource(state, res_key)
-        if current < amount:
-            cn = _res_cn(res_key)
-            failures.append(f"{cn}不足：需要 {amount}，当前 {int(current)}")
-    return (len(failures) == 0, failures)
-
-
-def _get_resource(state, key: str) -> float:
-    mapping = {"power": state.power, "water": state.water, "food": state.food, "scrap": state.scrap}
-    return mapping.get(key, 0.0)
-
-
-def _deduct_resource(state, key: str, amount):
-    if getattr(state, "infinite_resources", False):
-        return
-    mapping = {"power": "power", "water": "water", "food": "food", "scrap": "scrap"}
-    attr = mapping.get(key)
-    if attr:
-        current = getattr(state, attr)
-        setattr(state, attr, max(0, current - amount))
-
-
 def _condition_label(cond: dict) -> str:
     ctype = cond.get("type", "")
     if ctype == "has_resources":
-        parts = [f"{_res_cn(k)}:{v}" for k, v in cond.items() if k != "type"]
+        parts = [f"{room_system._res_cn(k)}:{v}" for k, v in cond.items() if k != "type"]
         return f"拥有资源: {' '.join(parts)}"
     elif ctype == "has_room":
         from shelter.data.rooms import get_room
@@ -561,4 +563,6 @@ def _condition_label(cond: dict) -> str:
         if "min_total_water" in cond:
             parts.append(f"总水 >= {cond['min_total_water']}")
         return "  ".join(parts)
+    elif ctype == "min_population":
+        return f"人口 >= {cond.get('value', 0)}"
     return str(cond)

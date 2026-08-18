@@ -15,49 +15,25 @@ from shelter.config import (
     INITIAL_MAX_ITEMS,
     INITIAL_POPULATION,
     MAX_LOG_ENTRIES,
-    FLOORS,
-    ROOMS_PER_FLOOR,
-    ROOM_STATE_EMPTY,
-    ROOM_STATE_RUIN,
     ROOM_STATE_BUILT,
-    ROOM_STATE_BUILDING,
-    ROOM_STATE_CLEARING,
     TAB_STATUS,
-    TAB_BUILD,
-    TAB_POPULATION,
-    TAB_MATERIALS,
     EVENT_INTERVAL_MIN,
     EVENT_INTERVAL_MAX,
 )
 
 
-def _make_room_slot(
-    state: int,
-    ruin_type: str | None = None,
-    room_type: str | None = None,
-    revealed: bool = False,
-    void: bool = False,
-) -> dict:
-    return {
-        "state": state,
-        "room_type": room_type,
-        "level": 1,
-        "ruin_type": ruin_type,
-        "assigned_workers": 0,
-        "build_end_time": None,
-        "action_type": None,  # "building" | "clearing" | None
-        "revealed": revealed,
-        "void": void,
-    }
-
-
 @dataclass
 class GameState:
-    """Holds all runtime state for the shelter."""
+    """Holds all runtime state for the shelter.
+
+    This class is intentionally state-only. Room lifecycle operations
+    (build, clear, upgrade, demolish, vision, capacity recalculation)
+    live in `shelter.systems.room_system`.
+    """
 
     # ---- tabs ----
     active_tab: int = TAB_STATUS
-    visible_tabs: set = field(default_factory=lambda: {TAB_STATUS, TAB_BUILD, TAB_POPULATION, TAB_MATERIALS})
+    visible_tabs: set = field(default_factory=lambda: {TAB_STATUS})
 
     # ---- resources ----
     power: float = INITIAL_POWER
@@ -90,6 +66,21 @@ class GameState:
         default_factory=lambda: time.time() + random.uniform(EVENT_INTERVAL_MIN, EVENT_INTERVAL_MAX)
     )
 
+    # ---- story system ----
+    story_active: bool = True
+    story_current_key: str | None = "intro"
+    story_event_index: int = 0
+    story_events: list = field(default_factory=list)
+    story_paused: bool = False
+    story_pause_tab: int | None = None
+    story_last_event_time: float = 0.0
+    story_popup_title: str = ""
+    story_popup_text: str = ""
+    story_popup_mode: str = "info"   # "info" | "choice"
+    story_choices: list | None = None
+    story_queue: list = field(default_factory=list)
+    story_flags: dict = field(default_factory=dict)
+
     # ---- log ----
     logs: list[str] = field(default_factory=list)
     log_scroll_offset: int = 0
@@ -107,119 +98,42 @@ class GameState:
     build_view_zoom: float = 1.0
 
     # ---- popup state ----
-    # popup_type: None | "build" | "room_info" | "ruin_info" | "room_action"
     popup_type: str | None = None
     popup_floor: int = 0
     popup_room: int = 0
 
+    # ---- blueprints ----
+    unlocked_blueprints: set = field(default_factory=set)
+
     def __post_init__(self):
-        if not self.logs:
-            self.logs = [
-                "避难所主控 AI 已重新激活。正在自检...",
-                "自检完成。核心系统正常，备用电源已接入。",
-                "检测到拾荒者信号。他们触发了入口机关。",
-                "基础协议已加载。等待管理者指令。",
-                "避难所状态：第1层部分可用，第2-5层均为废墟。需要立即修复。",
-            ]
+        from shelter.systems import room_system
         if not self.floors:
-            self._init_floors()
+            room_system.init_floors(self)
+        room_system.recalc_caps(self)
+        if not self.unlocked_blueprints:
+            self.unlocked_blueprints = set()
+        # Start the intro story if it hasn't been loaded from a save.
+        if getattr(self, "story_active", True) and not self.story_events:
+            self.story_active = False  # ensure play_story starts it immediately
+            from shelter.systems import story_system
+            story_system.play_intro(self)
 
-    def _init_floors(self):
-        """Initialize floors from the designer-defined layout table."""
-        from shelter.data.ruins import get_cell_spec
+    # ============================================================
+    # Tab / blueprint helpers
+    # ============================================================
 
-        self.floors = []
-        for f in range(FLOORS):
-            row = []
-            for r in range(ROOMS_PER_FLOOR):
-                spec = get_cell_spec(f, r)
-                if spec is None:
-                    slot = _make_room_slot(ROOM_STATE_EMPTY, void=True, revealed=False)
-                elif spec["state"] == ROOM_STATE_BUILT:
-                    slot = _make_room_slot(
-                        ROOM_STATE_BUILT,
-                        room_type=spec.get("room_type"),
-                        revealed=spec.get("revealed", True),
-                    )
-                elif spec["state"] == ROOM_STATE_EMPTY:
-                    slot = _make_room_slot(ROOM_STATE_EMPTY, revealed=spec.get("revealed", False))
-                else:  # RUIN
-                    slot = _make_room_slot(
-                        ROOM_STATE_RUIN,
-                        ruin_type=spec.get("ruin_type", "light_rubble"),
-                        revealed=spec.get("revealed", False),
-                    )
-                row.append(slot)
-            self.floors.append(row)
+    def unlock_tab(self, tab: int):
+        """Make a tab visible (player must click it themselves)."""
+        self.visible_tabs.add(tab)
 
-        # Propagate initial vision from all revealed rooms.
-        self._propagate_vision()
+    def unlock_blueprint(self, *keys: str):
+        """Unlock one or more room blueprints."""
+        for k in keys:
+            self.unlocked_blueprints.add(k)
 
-    def _propagate_vision(self):
-        """Reveal all neighbors reachable from currently revealed rooms."""
-        changed = True
-        while changed:
-            changed = False
-            for f in range(FLOORS):
-                for r in range(ROOMS_PER_FLOOR):
-                    slot = self.floors[f][r]
-                    if not slot.get("revealed") or slot.get("void"):
-                        continue
-                    if self._reveal_around(f, r):
-                        changed = True
-
-    def _reveal_around(self, floor: int, room: int) -> bool:
-        """Reveal neighbors of the given slot according to vision rules.
-        Returns True if any new slot was revealed.
-        """
-        slot = self.floors[floor][room]
-        if slot.get("void") or not slot.get("revealed"):
-            return False
-
-        changed = False
-        state = slot["state"]
-        room_type = slot.get("room_type")
-        is_elevator = room_type == "elevator"
-        provides_horizontal = state in (ROOM_STATE_EMPTY, ROOM_STATE_BUILT)
-
-        # Horizontal vision: empty / built rooms reveal left/right neighbors.
-        if provides_horizontal:
-            for dr in (-1, 1):
-                nr = room + dr
-                if 0 <= nr < ROOMS_PER_FLOOR:
-                    neighbor = self.floors[floor][nr]
-                    if not neighbor.get("void") and not neighbor.get("revealed"):
-                        neighbor["revealed"] = True
-                        changed = True
-
-        # Vertical vision: only elevators reveal elevator rooms above/below.
-        if is_elevator:
-            for df in (-1, 1):
-                nf = floor + df
-                if 0 <= nf < FLOORS:
-                    neighbor = self.floors[nf][room]
-                    is_elevator_neighbor = (
-                        neighbor.get("room_type") == "elevator"
-                        or (
-                            neighbor.get("state") == ROOM_STATE_RUIN
-                            and neighbor.get("ruin_type") == "elevator_ruin"
-                        )
-                    )
-                    if (
-                        not neighbor.get("void")
-                        and not neighbor.get("revealed")
-                        and is_elevator_neighbor
-                    ):
-                        neighbor["revealed"] = True
-                        changed = True
-
-        return changed
-
-    def _refresh_vision(self):
-        """Recalculate vision from all currently revealed rooms."""
-        self._propagate_vision()
-
-    # ---- popup helpers ----
+    # ============================================================
+    # Popup helpers
+    # ============================================================
 
     def open_popup(self, ptype: str, floor: int, room: int):
         self.popup_type = ptype
@@ -229,101 +143,16 @@ class GameState:
     def close_popup(self):
         self.popup_type = None
 
-    # ---- room helpers ----
+    # ============================================================
+    # Room helpers (thin getters only)
+    # ============================================================
 
     def get_room_slot(self, floor: int, room: int) -> dict:
         return self.floors[floor][room]
 
-    def start_building(self, floor: int, room: int, room_key: str, build_time: float):
-        slot = self.get_room_slot(floor, room)
-        slot["state"] = ROOM_STATE_BUILDING
-        slot["room_type"] = room_key
-        slot["revealed"] = True
-        if self.full_speed:
-            build_time = 0
-        slot["build_end_time"] = time.time() + build_time
-        slot["action_type"] = "building"
-
-    def start_clearing(self, floor: int, room: int, clear_time: float):
-        slot = self.get_room_slot(floor, room)
-        slot["state"] = ROOM_STATE_CLEARING
-        slot["revealed"] = True
-        if self.full_speed:
-            clear_time = 0
-        slot["build_end_time"] = time.time() + clear_time
-        slot["action_type"] = "clearing"
-
-    def complete_construction(self, floor: int, room: int):
-        """Called when a build/clear timer finishes."""
-        slot = self.get_room_slot(floor, room)
-        slot["revealed"] = True
-        action = slot["action_type"]
-        if action == "building":
-            slot["state"] = ROOM_STATE_BUILT
-            slot["level"] = 1
-            slot["assigned_workers"] = 0
-            self._apply_build_effect(slot.get("room_type"))
-        elif action == "clearing":
-            ruin_type = slot.get("ruin_type")
-            slot["ruin_type"] = None
-            self._award_ruin_rewards(ruin_type)
-            # Some ruins clear into a built room (e.g. elevator).
-            from shelter.data.ruins import RUIN_TYPES
-            ruin_data = RUIN_TYPES.get(ruin_type, {})
-            clears_to = ruin_data.get("clears_to")
-            if clears_to:
-                slot["state"] = ROOM_STATE_BUILT
-                slot["room_type"] = clears_to
-                slot["level"] = 1
-                slot["assigned_workers"] = 0
-                self._apply_build_effect(clears_to)
-            else:
-                slot["state"] = ROOM_STATE_EMPTY
-        slot["build_end_time"] = None
-        slot["action_type"] = None
-        # Vision may have expanded: re-run propagation.
-        self._refresh_vision()
-
-    def _apply_build_effect(self, room_type: str | None):
-        """Apply one-time effects when a room finishes construction."""
-        if not room_type:
-            return
-        from shelter.data.rooms import get_room
-
-        tmpl = get_room(room_type)
-        if not tmpl:
-            return
-        effect = tmpl.get("on_built_effect")
-        if effect == "increase_scrap_cap_50":
-            self.max_scrap += 50
-            self.add_log(f"仓库扩容：废料上限 +50（当前 {int(self.max_scrap)}）")
-        elif effect == "increase_scrap_cap_100":
-            self.max_scrap += 100
-            self.add_log(f"大型仓库扩容：废料上限 +100（当前 {int(self.max_scrap)}）")
-
-    def _award_ruin_rewards(self, ruin_type: str | None):
-        """Award items when a ruin is cleared."""
-        if not ruin_type:
-            return
-        from shelter.data.ruins import RUIN_TYPES
-        from shelter.data.items import get_item
-
-        ruin_data = RUIN_TYPES.get(ruin_type)
-        if not ruin_data:
-            return
-        for reward in ruin_data.get("rewards", []):
-            item_key = reward.get("item")
-            count = reward.get("count", 1)
-            if not item_key or get_item(item_key) is None:
-                continue
-            added = self.add_item(item_key, count)
-            if added > 0:
-                item_name = get_item(item_key)["name"]
-                self.add_log(f"清理废墟获得：{item_name} x{added}")
-            if added < count:
-                self.add_log("物品栏已满，部分奖励已丢失。")
-
-    # ---- population helpers ----
+    # ============================================================
+    # Population helpers
+    # ============================================================
 
     @property
     def free_workers(self) -> int:
@@ -369,7 +198,9 @@ class GameState:
             del self.job_assignment[job_type]
         return True
 
-    # ---- items ----
+    # ============================================================
+    # Items
+    # ============================================================
 
     def total_item_slots(self) -> int:
         """Total item slots currently occupied (each unit counts as one slot)."""
@@ -405,7 +236,9 @@ class GameState:
                 del self.items[item_key]
         return removed
 
-    # ---- log ----
+    # ============================================================
+    # Log
+    # ============================================================
 
     def add_log(self, text: str):
         self.logs.append(text)
@@ -418,6 +251,8 @@ class GameState:
 
     def update_time(self):
         self.elapsed_seconds = time.time() - self.start_time
+        from shelter.systems import story_system
+        story_system.tick(self)
 
     @property
     def elapsed_days(self) -> int:

@@ -22,7 +22,7 @@ from shelter.config import (
 )
 from shelter.game_state import GameState
 from shelter.save_system import list_saves
-from shelter.systems import resource_system, event_system
+from shelter.systems import resource_system, event_system, room_system, story_system
 from shelter.ui.renderer import draw_all
 from shelter.ui import tab_bar, build_tab, status_tab, console, popup, population_tab, materials_tab
 
@@ -60,6 +60,7 @@ _POPUP_HANDLERS = {
     "ruin_info": popup.handle_ruin_info_click,
     "room_info": popup.handle_room_info_click,
     "room_action": popup.handle_room_action_click,
+    "story": popup.handle_story_click,
 }
 
 
@@ -90,7 +91,7 @@ def _tick_construction(state):
                 end_time = 0
             if now >= end_time and slot.get("action_type"):
                 action = slot["action_type"]
-                state.complete_construction(f, r)
+                room_system.complete_construction(state, f, r)
                 if action == "building":
                     from shelter.data.rooms import get_room
                     tmpl = get_room(slot.get("room_type", ""))
@@ -111,7 +112,7 @@ def main():
     fonts = init_fonts()
     state = GameState()
 
-    # notify if save files exist
+    # notify if save files exist (after intro so it doesn't clutter opening logs)
     saves = list_saves()
     if saves:
         state.add_log(f"检测到 {len(saves)} 个存档。输入 /saves 查看，/load [槽位] 读取。")
@@ -135,7 +136,15 @@ def main():
 
                 if event.button == 1:  # left click
                     if tab_bar.handle_click(pos, state):
-                        pass
+                        # Story sequence: if a newly-unlocked tab is clicked, show its popup.
+                        if (
+                            state.story_active
+                            and state.story_paused
+                            and state.story_pause_tab == state.active_tab
+                        ):
+                            state.popup_type = "story"
+                            state.popup_floor = 0
+                            state.popup_room = 0
                     elif state.active_tab == TAB_BUILD:
                         build_tab.handle_mouse_down(pos, state)
                     elif state.active_tab == TAB_POPULATION:
@@ -165,7 +174,11 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if state.popup_type:
-                        state.close_popup()
+                        if state.popup_type == "story":
+                            state.close_popup()
+                            story_system.resume_story(state)
+                        else:
+                            state.close_popup()
                     else:
                         state.console_input = ""
                 elif event.key == pygame.K_TAB:
@@ -181,14 +194,15 @@ def main():
         # construction timers
         _tick_construction(state)
 
-        # resource production (passive scrap + room production)
-        res_msgs = resource_system.tick(state)
-        for msg in res_msgs:
-            state.add_log_and_track(msg)
+        if not state.story_active:
+            # resource production (passive scrap + room production)
+            res_msgs = resource_system.tick(state)
+            for msg in res_msgs:
+                state.add_log_and_track(msg)
 
-        evt_msgs = event_system.tick(state)
-        for msg in evt_msgs:
-            state.add_log_and_track(msg)
+            evt_msgs = event_system.tick(state)
+            for msg in evt_msgs:
+                state.add_log_and_track(msg)
 
         # ---- render ----
         draw_all(screen, state, fonts)
