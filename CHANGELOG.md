@@ -161,9 +161,46 @@
 
 ---
 
+## 步骤 8 — 项目结构解耦与剧情系统扩展性改造
+
+**2026-08-18**
+
+重构核心模块，将业务逻辑从 `GameState` 与 UI 中剥离，并泛化剧情系统以支持后续剧情、选项与事件。
+
+**房间系统解耦：**
+- 新增/重写 `shelter/systems/room_system.py`，集中所有房间生命周期操作：
+  - 楼层初始化、视野传播、容量重算
+  - `start_building` / `start_clearing` / `complete_construction`
+  - `get_upgrade_options` / `apply_room_action`（升级、维修、降级、拆除）
+  - 通用资源检查 `check_resources` / `deduct_resources`
+- `shelter/game_state.py` 瘦身：移除房间/视野/容量业务方法，保留纯状态与通用辅助方法
+- `shelter/ui/popup.py` 不再直接修改 `state.floors` 或扣资源，所有房间动作通过 `room_system` 执行
+- `shelter/main.py` 的 `_tick_construction` 改为调用 `room_system.complete_construction`
+
+**剧情系统扩展性：**
+- 将 `intro_*` 字段全部改为 `story_*`，新增 `story_queue`、`story_flags`、`story_popup_mode`、`story_choices`
+- 重写 `shelter/systems/story_system.py`：
+  - `play_story(state, story_key)` 支持任意剧情与排队
+  - 内置 action：`log`、`unlock_tab`、`unlock_blueprint`、`flag`、`choice`、`condition`、`end_story`
+  - `register_action(name, handler)` 可注册自定义 action
+  - `choose(state, choice_index)` 处理选项分支
+- `shelter/ui/popup.py`：tutorial popup 改为 story popup，支持 `info` 和 `choice` 两种模式
+- `shelter/data/stories.py`：`end_intro` 改为 `end_story`
+- `shelter/save_system.py`：新增 `intro_*` → `story_*` 字段迁移，保持旧存档可读
+
+**验证：**
+- 编译检查通过
+- 游戏可正常启动并运行 5 秒无报错
+- 临时 smoke test 覆盖：初始化、房间维修、剧情 tick、剧情选项分支，全部通过
+
+---
+
 ## 技术决策记录
 
 - **纯 dataclass 而非 ECS**：当前规模下 dataclass 更简单，无需引入 ECS 框架
 - **UI 模块无状态**：所有 UI 状态放 GameState（如 `build_view_offset_x`），模块级只保留拖拽中间变量
+- **业务逻辑下沉到 systems/**：`GameState` 只存状态，房间操作在 `room_system`，剧情推进在 `story_system`
 - **popup 覆盖而非新窗口**：弹窗在同一 Pygame surface 上层绘制，使用半透明遮罩
 - **工种独立于房间**：产出率由工种定义而非房间模板，使同类房间的岗位可聚合
+- **剧情数据驱动**：所有剧情事件写在 `data/stories.py`，运行时由 `story_system` 驱动，便于后续扩展选项与分支
+- **存档字段迁移**：`load_game` 负责旧字段到新字段的兼容，避免 GameState 被历史字段污染

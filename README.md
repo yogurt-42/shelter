@@ -2,16 +2,21 @@
 
 末世废土地下避难所实时放置策略经营文字游戏。
 
-## 运行
+## 项目结构
 
-```bash
-cd D:/shelter
-python -m shelter.main
-```
+- `shelter/main.py` — 游戏入口与主循环
+- `shelter/config.py` — 所有常量
+- `shelter/game_state.py` — 纯状态 dataclass
+- `shelter/systems/` — 游戏逻辑：资源、事件、房间、剧情
+- `shelter/data/` — 静态数据：房间、废墟、工种、物品、事件、剧情
+- `shelter/ui/` — 渲染与输入
+- `shelter/save_system.py` — 存档
+- `design/` — 设计文档（流程、机制、剧情、数值）
 
-需要 Python 3.12+ 和 Pygame 2.6。
+## 当前状态
 
-## 游戏简介
+第一批房间系统与开场剧情已落地。剧情/事件数据驱动，支持选项分支与自定义 action 扩展。
+
 
 你是一座废弃地下避难所被重新激活的主控 AI。拾荒者触发了入口机关，你从休眠中苏醒。
 

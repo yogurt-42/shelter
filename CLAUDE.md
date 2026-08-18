@@ -18,24 +18,26 @@ cd D:/shelter && python -c "from shelter.game_state import GameState; ..."  # RE
 - Font: SimHei (CJK) with Consolas fallback
 - 1100×700 window, 30 FPS, single-threaded game loop
 
-## Directory Map (~2800 LOC)
+## Directory Map (~3000 LOC)
 
 ```
 shelter/
 ├── main.py                     # entry: init pygame → event loop → tick → render
 ├── config.py                   # ALL constants (window, colors, fonts, layout, pacing)
-├── game_state.py               # @dataclass GameState — single source of truth
+├── game_state.py               # @dataclass GameState — pure state container
 ├── save_system.py              # pickle-based save/load, 3 slots, saves/ folder
 ├── data/                       # static definitions (read-only at runtime)
 │   ├── rooms.py                # ROOM_TEMPLATES dict, get_room(), list_buildable()
-│   ├── ruins.py                # RUIN_TYPES, can_clear(), evaluate_condition()
+│   ├── ruins.py                # RUIN_TYPES, can_clear(), evaluate_condition(), INITIAL_FLOOR_LAYOUT
 │   ├── job_types.py            # JOB_DEFINITIONS, get_job()
 │   ├── items.py                # ITEM_DEFINITIONS, get_item(), list_items()
-│   └── events.py               # AMBIENT_EVENTS list (Chinese strings)
-├── systems/                    # game logic, stateless, called per tick
-│   ├── resource_system.py      # tick(state) → job production + passive drain + base scrap
+│   ├── events.py               # AMBIENT_EVENTS list (Chinese strings)
+│   └── stories.py              # STORIES dict — narrative/event scripts
+├── systems/                    # game logic, stateless, called per tick or on player action
+│   ├── resource_system.py      # tick(state) → job production + passive drain
 │   ├── event_system.py         # tick(state) → random ambient log lines
-│   └── room_system.py          # placeholder (unused)
+│   ├── story_system.py         # tick(state) → drive narrative events, choices, conditions
+│   └── room_system.py          # room lifecycle: build/clear/complete/upgrade/demolish/vision/caps
 └── ui/                         # rendering + input dispatch
     ├── renderer.py             # draw_all() — compositor, calls each module in order
     ├── tab_bar.py              # top tab strip, ALL_TABS registry, show/hide
@@ -45,15 +47,15 @@ shelter/
     ├── population_tab.py       # job-type aggregation, worker assignment
     ├── materials_tab.py        # resources + items inventory display
     ├── console.py              # bottom command line, /player //admin parsing
-    └── popup.py                # overlay: build/ruin/room-info/room-action popups
+    └── popup.py                # overlay: build/ruin/room-info/room-action/story popups
 ```
 
 ## Core Architecture
 
 ### GameState (`game_state.py`)
 
-`@dataclass` — THE single source of truth. Every module reads from this; only systems and
-click handlers write to it. UI draw functions are pure: `draw(surface, state, fonts)`.
+`@dataclass` — THE single source of truth. Holds state only. All room lifecycle mutations
+live in `systems/room_system.py`; all narrative progression lives in `systems/story_system.py`.
 
 Key fields:
 
@@ -65,14 +67,15 @@ Key fields:
 | Admin flags | `infinite_resources: bool`, `full_speed: bool` |
 | Population | `population: int`, `job_assignment: dict[str,int]` (job_type→workers) |
 | Floors | `floors: list[list[dict]]` — 4 floors × 10 rooms, each slot: `{state, room_type, level, ruin_type, build_end_time, action_type, revealed, void}` |
-| UI state | `console_input`, `console_history`, `logs`, `log_scroll_offset`, `build_view_offset_x/y` |
+| Story | `story_active`, `story_current_key`, `story_events`, `story_event_index`, `story_paused`, `story_pause_tab`, `story_popup_title/text/mode`, `story_choices`, `story_queue`, `story_flags` |
+| UI state | `console_input`, `console_history`, `logs`, `log_scroll_offset`, `build_view_offset_x/y/zoom` |
 | Popup | `popup_type: str\|None`, `popup_floor`, `popup_room` |
+| Blueprints | `unlocked_blueprints: set[str]` |
 | Time | `elapsed_seconds`, `last_resource_tick`, `last_event_time` |
 
-Key methods: `open_popup()`, `close_popup()`, `start_building()`, `start_clearing()`,
-`complete_construction()`, `_propagate_vision()`, `_reveal_around()`, `_refresh_vision()`,
-`free_workers`, `total_job_slots(job_type)`,
-`assign_worker(job_type)`, `unassign_worker(job_type)`.
+Key methods: `open_popup()`, `close_popup()`, `unlock_tab()`, `unlock_blueprint()`,
+`free_workers`, `total_job_slots(job_type)`, `assign_worker(job_type)`, `unassign_worker(job_type)`,
+`can_add_item()`, `add_item()`, `remove_item()`, `add_log()`, `add_log_and_track()`, `update_time()`.
 
 ### Event Flow (main.py)
 
@@ -82,19 +85,22 @@ while running:
         if QUIT: break
         if MOUSEBUTTONDOWN (btn 1):
             if popup open → popup handler
-            elif tab_bar click → switch tab
+            elif tab_bar click → switch tab (or open story popup if tab is story target)
             elif TAB_BUILD → build_tab drag start
             elif TAB_POPULATION → population_tab click
+            elif TAB_MATERIALS → materials_tab click
         if MOUSEBUTTONDOWN (btn 3):
             if TAB_BUILD → build_tab right-click
         if KEYDOWN:
-            if ESC → close popup or clear console
+            if ESC → close popup (story popup resumes story) or clear console
             if TAB → cycle visible tabs
             else → console.handle_key()
 
-    _tick_construction(state)         # check build/clear timers
-    resource_system.tick(state)       # job production + passive drain + scrap
-    event_system.tick(state)          # random ambient events
+    state.update_time()                 # advance story system
+    _tick_construction(state)           # check build/clear timers → room_system.complete_construction
+    if not state.story_active:          # normal gameplay after intro
+        resource_system.tick(state)     # job production + passive drain
+        event_system.tick(state)        # random ambient events
 
     renderer.draw_all(screen, state, fonts)
 ```
@@ -104,7 +110,7 @@ while running:
 ```
 1. TAB_BAR          (y=0, h=30)       always
 2. RESOURCE_BAR     (y=30, h=28)      always
-3. Active tab content (y=58..572)      one of: status / build(+mini-log) / population(+mini-log)
+3. Active tab content (y=58..572)      one of: status / build(+mini-log) / population(+mini-log) / materials(+mini-log)
 4. CONSOLE          (y=670, h=30)     always
 5. Popup overlay    (centered)        if popup_type is set
 ```
@@ -153,6 +159,22 @@ Room slot dict: `{"state": int, "room_type": str|None, "level": int,
 - Resource production: `workers × per_worker_rate × dt` (from JOB_DEFINITIONS)
 - Passive rooms (warehouse): `job_slots=0`, drain resources via `passive_consumption`
 
+### Story System
+
+Stories are data-driven event sequences in `data/stories.py`. Each event is a tuple:
+`(delay_seconds, action, data, is_blocking)`.
+
+Built-in actions:
+- `log` — print a log line
+- `unlock_tab` — reveal a tab and show a story popup (blocking)
+- `unlock_blueprint` — unlock room blueprint keys
+- `flag` — set/read story flags in `state.story_flags`
+- `choice` — show a choice popup (blocking)
+- `condition` — branch to another event index based on a condition
+- `end_story` — finish current story, optionally queue another
+
+Custom actions can be registered via `story_system.register_action(name, handler)`.
+
 ### Config Constants
 
 ```
@@ -161,8 +183,10 @@ ROOM_STATE_EMPTY=0, RUIN=1, BUILT=2, BUILDING=3, CLEARING=4
 FLOORS=4, ROOMS_PER_FLOOR=10
 POPUP_WIDTH=520, POPUP_MAX_HEIGHT=560
 BUILD_ZOOM_MIN=0.5, BUILD_ZOOM_MAX=2.0, BUILD_ZOOM_STEP=0.1
-INITIAL_POPULATION=5, INITIAL_SCRAP=200, INITIAL_POWER=100
-INITIAL_MAX_ITEMS=20
+DAY_LENGTH_SECONDS=10.0
+INITIAL_POPULATION=3, INITIAL_SCRAP=0, INITIAL_POWER=0, INITIAL_WATER=20, INITIAL_FOOD=20
+INITIAL_MAX_POWER=50, INITIAL_MAX_WATER=50, INITIAL_MAX_FOOD=50, INITIAL_MAX_SCRAP=0
+INITIAL_MAX_ITEMS=10
 ```
 
 ### Save System (`save_system.py`)
@@ -172,7 +196,7 @@ Pickle-based, 3 slots, saved to `saves/slot_N.sav` in project root.
 | Function | Purpose |
 |----------|---------|
 | `save_game(state, slot)` | Pickle entire GameState + metadata → file |
-| `load_game(slot)` | Read file → GameState (resets timers to now) |
+| `load_game(slot)` | Read file → GameState (resets timers to now, migrates old fields) |
 | `list_saves()` | Scan all slots → metadata dicts (no unpickle) |
 | `delete_save(slot)` | Remove one save file |
 
@@ -197,14 +221,14 @@ Startup: `main.py` checks for saves and adds a reminder log line if any exist.
 ### A new room type
 1. `data/rooms.py`: add entry to ROOM_TEMPLATES with: key, name, description,
    build_cost, build_time, job_type (or None), job_slots (or 0),
-   upgrades_to, downgrade_to, passive_consumption (optional)
+   upgrades_to, downgrade_to, passive_consumption (optional), cap_effects (optional)
 2. If it has workers: add corresponding job type to `data/job_types.py`
-3. Add to `list_buildable()` if it's a base (non-upgrade) room
+3. Add to `BUILDABLE_ROOM_KEYS` if it's a base (non-upgrade) room
 
 ### A new ruin type
 1. `data/ruins.py`: add entry to RUIN_TYPES with: key, name, description,
    clear_cost, clear_time, conditions[], rewards[] (optional), clears_to (optional)
-2. Add conditions using types: `has_resources`, `has_room`, `stat_check`
+2. Add conditions using types: `has_resources`, `has_room`, `stat_check`, `min_population`
 3. Assign to slots via `INITIAL_FLOOR_LAYOUT` in `data/ruins.py`
 
 ### Edit the map layout
@@ -233,7 +257,7 @@ Startup: `main.py` checks for saves and adds a reminder log line if any exist.
 3. `data/job_types.py`: reference in production/consumption
 4. `systems/resource_system.py`: add to `_add_resource()` mapping + `_clamp_resources()`
 5. `ui/resource_bar.py`: add display
-6. `ui/popup.py`: add to `_res_cn()` mapping
+6. `ui/popup.py`: add to `room_system._res_cn()` mapping
 
 ### A new item
 1. `data/items.py`: add entry to ITEM_DEFINITIONS with: key, name, description
@@ -245,3 +269,15 @@ Startup: `main.py` checks for saves and adds a reminder log line if any exist.
 1. `ui/popup.py`: add `draw_xxx()` + `handle_xxx_click()`
 2. `ui/renderer.py`: add to `_draw_popup_overlay()`
 3. `main.py`: add to `_POPUP_HANDLERS` dict
+
+### A new story / narrative event
+1. `data/stories.py`: add a story entry to `STORIES` with a list of events
+2. Event tuple: `(delay_seconds, action, data, is_blocking)`
+3. Use built-in actions (`log`, `unlock_tab`, `unlock_blueprint`, `flag`, `choice`, `condition`, `end_story`)
+   or register a custom handler via `story_system.register_action()`
+4. Start the story in code with `story_system.play_story(state, "story_key")`
+
+### A new story action
+1. Define a handler `handler(state, data) -> bool` in `systems/story_system.py` or any module
+2. Register it with `story_system.register_action("my_action", handler)`
+3. Use it in `data/stories.py`: `(delay, "my_action", {...}, False)`
