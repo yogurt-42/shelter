@@ -93,27 +93,29 @@ TAB_MATERIALS = 3
 # ============================================================
 # Population
 # ============================================================
-INITIAL_POPULATION = 5
+INITIAL_POPULATION = 3
 
 # ============================================================
 # Game pacing
 # ============================================================
 GAME_TICK_INTERVAL = 1.0
+DAY_LENGTH_SECONDS = 10.0  # 10 real seconds = 1 in-game day
 
 # ============================================================
 # Initial resources
 # ============================================================
-INITIAL_POWER = 100
-INITIAL_WATER = 50
-INITIAL_FOOD = 30
-INITIAL_SCRAP = 200
+INITIAL_POWER = 0
+INITIAL_WATER = 20
+INITIAL_FOOD = 20
+INITIAL_SCRAP = 0
 
-INITIAL_MAX_POWER = 200
-INITIAL_MAX_WATER = 100
-INITIAL_MAX_FOOD = 100
+INITIAL_MAX_POWER = 50
+INITIAL_MAX_WATER = 50
+INITIAL_MAX_FOOD = 50
 
-INITIAL_MAX_SCRAP = 300
-INITIAL_MAX_ITEMS = 20
+# scrap cap starts at 0 until warehouse is cleared/built
+INITIAL_MAX_SCRAP = 0
+INITIAL_MAX_ITEMS = 10
 
 MAX_LOG_ENTRIES = 200
 

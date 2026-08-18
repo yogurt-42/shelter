@@ -30,7 +30,7 @@ def draw(surface: pygame.Surface, state, fonts: dict):
         ("电力", state.power, state.max_power),
         ("水",   state.water, state.max_water),
         ("食物", state.food,  state.max_food),
-        ("废料", state.scrap, None),
+        ("废料", state.scrap, state.max_scrap),
     ]
 
     x = 16

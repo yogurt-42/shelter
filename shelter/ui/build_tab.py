@@ -122,13 +122,34 @@ def _clamp_zoom(state):
     _clamp_offset_y(state)
 
 
-def _scale_text(text_surf: pygame.Surface, zoom: float) -> pygame.Surface:
-    """Scale a text surface so it stays proportional to zoomed room cells."""
-    if zoom == 1.0:
-        return text_surf
-    w = max(1, int(text_surf.get_width() * zoom))
-    h = max(1, int(text_surf.get_height() * zoom))
-    return pygame.transform.scale(text_surf, (w, h))
+# Cache for scaled fonts; key is the target pixel size.
+_ZOOM_FONTS: dict[int, pygame.font.Font] = {}
+
+
+def _zoom_font(fonts: dict, zoom: float) -> pygame.font.Font:
+    """Return a font whose size matches the current zoom level.
+
+    Re-rendering at the target size keeps text sharp when zoomed out;
+    scaling an already-rendered surface causes blur.
+    """
+    from shelter.config import FONT_NAME_CJK, FONT_NAME_MONO
+
+    base_size = fonts["small"].get_height()
+    if zoom <= 0.6:
+        target = max(8, int(base_size * 0.75))
+    elif zoom <= 0.9:
+        target = base_size
+    elif zoom <= 1.4:
+        target = int(base_size * 1.2)
+    else:
+        target = int(base_size * 1.5)
+
+    if target not in _ZOOM_FONTS:
+        try:
+            _ZOOM_FONTS[target] = pygame.font.SysFont(FONT_NAME_CJK, target)
+        except Exception:
+            _ZOOM_FONTS[target] = pygame.font.SysFont(FONT_NAME_MONO, target)
+    return _ZOOM_FONTS[target]
 
 
 def _content_rect() -> pygame.Rect:
@@ -155,7 +176,7 @@ def draw(surface: pygame.Surface, state, fonts: dict):
     # ---- clip so content never bleeds into adjacent UI ----
     surface.set_clip(content_rect)
 
-    font = fonts["small"]
+    font = _zoom_font(fonts, state.build_view_zoom)
     offset_x = state.build_view_offset_x
     offset_y = state.build_view_offset_y
 
@@ -223,7 +244,10 @@ def draw(surface: pygame.Surface, state, fonts: dict):
                 from shelter.data.rooms import get_room
                 tmpl = get_room(room["room_type"])
                 room_name = tmpl["name"] if tmpl else room["room_type"]
-                label_text = f"{room_name} Lv.{room['level']}"
+                if room["level"] == 0:
+                    label_text = room_name
+                else:
+                    label_text = f"{room_name} Lv.{room['level']}"
             elif room_state == ROOM_STATE_RUIN and room.get("ruin_type"):
                 label_text = _get_ruin_name(room["ruin_type"])
             elif room_state in (ROOM_STATE_BUILDING, ROOM_STATE_CLEARING):
@@ -232,7 +256,6 @@ def draw(surface: pygame.Surface, state, fonts: dict):
                 label_text = STATE_LABELS.get(room_state, "?")
 
             cell_label = font.render(label_text, True, COLOR_TEXT_MID)
-            cell_label = _scale_text(cell_label, state.build_view_zoom)
             lx = cell_x + (cell_w - cell_label.get_width()) // 2
             ly = cell_y + (cell_h - cell_label.get_height()) // 2 - 4
             surface.blit(cell_label, (lx, ly))
@@ -267,16 +290,14 @@ def draw(surface: pygame.Surface, state, fonts: dict):
                     # time remaining hint
                     secs_left = int(remaining)
                     hint = font.render(f"{secs_left}s", True, COLOR_TEXT_DIM)
-                    hint = _scale_text(hint, state.build_view_zoom)
                     hint_x = cell_x + cell_w - hint.get_width() - 4
                     hint_y = bar_y - hint.get_height() - 1
                     surface.blit(hint, (hint_x, hint_y))
 
-        # ---- floor label (vertically centered with the cell row) ----
+        # ---- floor label (vertically centered with the cell row, pinned to left edge) ----
         label = f"第{f + 1}层"
         title_surf = font.render(label, True, COLOR_TEXT_BRIGHT)
-        title_surf = _scale_text(title_surf, state.build_view_zoom)
-        label_x = MAP_LEFT_MARGIN + offset_x - title_surf.get_width() - 8
+        label_x = content_rect.left + 8
         label_y = cell_y + (cell_h - title_surf.get_height()) // 2
         surface.blit(title_surf, (label_x, label_y))
 

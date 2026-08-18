@@ -11,63 +11,53 @@ from shelter.config import (
 # ============================================================
 
 RUIN_TYPES = {
-    "light_rubble": {
-        "key": "light_rubble",
-        "name": "轻度废墟",
-        "description": "碎石和废弃物堆积，清理难度较低。",
-        "clear_cost": {"scrap": 30},
+    "warehouse_ruin": {
+        "key": "warehouse_ruin",
+        "name": "掩埋的仓库",
+        "description": "碎石和旧货架掩埋了这片仓储区，清理后可以恢复部分存储功能。",
+        "clear_cost": {},
         "clear_time": 10,
-        "conditions": [],
-        "rewards": [{"item": "test_item_a", "count": 1}],
+        "conditions": [
+            {"type": "min_population", "value": 3},
+        ],
+        "rewards": [],
+        "clears_to": "warehouse_0",
+        "triggers_event": "starting_funds",
     },
-    "heavy_rubble": {
-        "key": "heavy_rubble",
-        "name": "重度废墟",
-        "description": "结构坍塌严重，需要大量材料支撑修复。",
-        "clear_cost": {"scrap": 80},
-        "clear_time": 30,
-        "conditions": [],
-        "rewards": [{"item": "test_item_a", "count": 2}],
+    "debris_front": {
+        "key": "debris_front",
+        "name": "坍塌残骸",
+        "description": "结构坍塌留下的碎石堆，清理后可以作为建造空间。",
+        "clear_cost": {},
+        "clear_time": 15,
+        "conditions": [
+            {"type": "min_population", "value": 3},
+        ],
+        "rewards": [],
+        "clears_to": None,
     },
-    "faulty_machinery": {
-        "key": "faulty_machinery",
-        "name": "故障设备",
-        "description": "旧时代的工业机器残骸，体积庞大。",
-        "clear_cost": {"scrap": 60, "water": 30},
+    "debris_back": {
+        "key": "debris_back",
+        "name": "坍塌残骸",
+        "description": "结构坍塌留下的碎石堆，清理后可以作为建造空间。",
+        "clear_cost": {},
         "clear_time": 20,
-        "conditions": [],
-        "rewards": [{"item": "test_item_b", "count": 1}],
-    },
-    "sealed_door": {
-        "key": "sealed_door",
-        "name": "密封安全门",
-        "description": "厚重的防爆门，似乎通向更深的区域。需要足够电力驱动开启装置。",
-        "clear_cost": {"scrap": 40},
-        "clear_time": 25,
         "conditions": [
-            {"type": "stat_check", "min_total_power": 50},
+            {"type": "min_population", "value": 3},
         ],
-        "rewards": [{"item": "test_item_a", "count": 1}, {"item": "test_item_b", "count": 1}],
-    },
-    "biohazard": {
-        "key": "biohazard",
-        "name": "生物危害区",
-        "description": "残留的生化污染物覆盖了整个房间。必须配备净水设备才能安全处理。",
-        "clear_cost": {"scrap": 100, "water": 50},
-        "clear_time": 45,
-        "conditions": [
-            {"type": "has_room", "room_type": "water_purifier"},
-        ],
-        "rewards": [{"item": "test_item_b", "count": 2}],
+        "rewards": [],
+        "clears_to": None,
     },
     "elevator_ruin": {
         "key": "elevator_ruin",
         "name": "损坏的电梯井",
-        "description": "坍塌的电梯井，清理后可以恢复垂直通行。",
-        "clear_cost": {"scrap": 100, "power": 50},
-        "clear_time": 30,
-        "conditions": [],
-        "rewards": [{"item": "test_item_a", "count": 1}],
+        "description": "坍塌的电梯井，需要一次性电力驱动清理设备，清理后可恢复垂直通行。",
+        "clear_cost": {"power": 5},
+        "clear_time": 20,
+        "conditions": [
+            {"type": "min_population", "value": 3},
+        ],
+        "rewards": [],
         "clears_to": "elevator",
     },
 }
@@ -116,6 +106,11 @@ def evaluate_condition(state, condition: dict) -> tuple[bool, str]:
         # extensible: add more stat checks here
         return (True, "")
 
+    elif ctype == "min_population":
+        if state.population < condition.get("value", 0):
+            return (False, f"need population >= {condition['value']}")
+        return (True, "")
+
     else:
         return (True, "")  # unknown condition type, pass by default
 
@@ -155,31 +150,31 @@ def _get_resource(state, key: str) -> float:
 #   {"state": ROOM_STATE_RUIN,  "ruin_type": str, "revealed": bool}
 
 INITIAL_FLOOR_LAYOUT = {
-    # Floor 1 (surface): only the gate starts revealed; everything else is discovered by the player.
+    # Floor 1 (surface / upper underground)
     0: [
-        None,  # R1  void
-        {"state": ROOM_STATE_BUILT, "room_type": "gate", "revealed": True},  # R2 避难所大门
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R3
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R4
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R5
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R6
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R7
-        {"state": ROOM_STATE_RUIN, "ruin_type": "elevator_ruin", "revealed": False},  # R8 电梯废墟
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R9
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R10
+        {"state": ROOM_STATE_BUILT, "room_type": "gate", "revealed": True},          # R1 避难所大门
+        {"state": ROOM_STATE_BUILT, "room_type": "power_0", "revealed": True},       # R2 损坏的发电机
+        {"state": ROOM_STATE_BUILT, "room_type": "food_0", "revealed": True},        # R3 损坏的种植槽
+        {"state": ROOM_STATE_BUILT, "room_type": "water_0", "revealed": True},       # R4 损坏的滤水器
+        {"state": ROOM_STATE_RUIN, "ruin_type": "warehouse_ruin", "revealed": True}, # R5 掩埋的仓库
+        {"state": ROOM_STATE_RUIN, "ruin_type": "debris_front", "revealed": False},  # R6 坍塌残骸
+        {"state": ROOM_STATE_RUIN, "ruin_type": "elevator_ruin", "revealed": False}, # R7 损坏的电梯井
+        {"state": ROOM_STATE_RUIN, "ruin_type": "debris_back", "revealed": False},   # R8 坍塌残骸
+        {"state": ROOM_STATE_RUIN, "ruin_type": "debris_back", "revealed": False},   # R9 坍塌残骸
+        None,                                                                            # R10 void
     ],
     # Floor 2 (hidden until elevator connects)
     1: [
         None,  # R1 void
         None,  # R2 void
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R3
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R4
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R5
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R6
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R7
+        {"state": ROOM_STATE_RUIN, "ruin_type": "debris_back", "revealed": False},    # R3
+        {"state": ROOM_STATE_RUIN, "ruin_type": "debris_back", "revealed": False},    # R4
+        {"state": ROOM_STATE_RUIN, "ruin_type": "debris_back", "revealed": False},    # R5
+        {"state": ROOM_STATE_RUIN, "ruin_type": "debris_back", "revealed": False},    # R6
+        {"state": ROOM_STATE_RUIN, "ruin_type": "debris_back", "revealed": False},    # R7
         {"state": ROOM_STATE_RUIN, "ruin_type": "elevator_ruin", "revealed": False},  # R8 电梯废墟
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R9
-        {"state": ROOM_STATE_RUIN, "ruin_type": "light_rubble", "revealed": False},   # R10
+        {"state": ROOM_STATE_RUIN, "ruin_type": "debris_back", "revealed": False},    # R9
+        {"state": ROOM_STATE_RUIN, "ruin_type": "debris_back", "revealed": False},    # R10
     ],
     # Floors 3-4: not yet designed
     2: [],

@@ -1,59 +1,192 @@
 """Shelter — room template definitions.
 
-Each room template defines:
-  - job_type: str | None   — which job type this room provides (None = passive room)
-  - job_slots: int         — number of job slots (0 = no workers needed)
-  - passive_consumption: dict (optional) — per-room resource drain (worker-independent)
-  - on_built_effect: str   (optional) — special effect when room is built
+Each template defines one specific room grade. The key naming convention:
+  <function>_<level>   e.g. power_0, power_1, warehouse_1
+
+Fields:
+  - job_type: str | None — which job type this room provides
+  - job_slots: int — number of workers the room can hold
+  - production_per_day: dict — per-worker daily production (only while assigned)
+  - consumption_per_day: dict — per-worker daily consumption (only while assigned)
+  - passive_consumption_per_day: dict — per-room daily drain regardless of workers
+  - cap_effects: dict — changes to resource/item caps when built
+  - on_built_effect: str (optional) — legacy special effect hook
 """
 
 ROOM_TEMPLATES = {
-    "generator": {
-        "key": "generator",
-        "name": "发电机房",
-        "description": "基础发电设施，为避难所提供稳定电力。",
-        "build_cost": {"scrap": 80},
-        "build_time": 15,
+    # ============================================================
+    # Power
+    # ============================================================
+    "power_0": {
+        "key": "power_0",
+        "name": "损坏的发电机",
+        "description": "外壳开裂、线路裸露的发电机，只能输出微弱电力。",
+        "build_cost": {},
+        "build_time": 0,
         "job_type": "power_tech",
-        "job_slots": 2,
-        "upgrades_to": ["advanced_generator"],
+        "job_slots": 1,
+        "production_per_day": {"power": 3},
+        "consumption_per_day": {},
+        "upgrades_to": ["power_1"],
         "downgrade_to": None,
+        "is_damaged": True,
     },
-    "water_purifier": {
-        "key": "water_purifier",
-        "name": "净水房",
-        "description": "过滤地下水与回收废水，产出净水。",
-        "build_cost": {"scrap": 60},
-        "build_time": 12,
+    "power_1": {
+        "key": "power_1",
+        "name": "简陋的发电机",
+        "description": "重新接好线路的基础发电设备，输出稳定。",
+        "build_cost": {"scrap": 15},
+        "build_time": 10,
+        "job_type": "power_tech",
+        "job_slots": 1,
+        "production_per_day": {"power": 6},
+        "consumption_per_day": {},
+        "upgrades_to": [],
+        "downgrade_to": "power_0",
+    },
+
+    # ============================================================
+    # Water
+    # ============================================================
+    "water_0": {
+        "key": "water_0",
+        "name": "损坏的滤水器",
+        "description": "滤芯堵塞、泵体老化的净水装置，有人值守时才能运转。",
+        "build_cost": {},
+        "build_time": 0,
         "job_type": "water_tech",
-        "job_slots": 2,
-        "upgrades_to": ["advanced_purifier"],
+        "job_slots": 1,
+        "production_per_day": {"water": 3},
+        "consumption_per_day": {"power": 1},
+        "upgrades_to": ["water_1"],
         "downgrade_to": None,
+        "is_damaged": True,
     },
-    "farm": {
-        "key": "farm",
-        "name": "种植房",
-        "description": "地下温室，利用人工光源种植作物。",
-        "build_cost": {"scrap": 50},
-        "build_time": 20,
+    "water_1": {
+        "key": "water_1",
+        "name": "简陋的滤水器",
+        "description": "更换滤芯后的基础净水设备，产出足以维持小规模人口。",
+        "build_cost": {"scrap": 15},
+        "build_time": 10,
+        "job_type": "water_tech",
+        "job_slots": 1,
+        "production_per_day": {"water": 6},
+        "consumption_per_day": {"power": 1},
+        "upgrades_to": [],
+        "downgrade_to": "water_0",
+    },
+
+    # ============================================================
+    # Food
+    # ============================================================
+    "food_0": {
+        "key": "food_0",
+        "name": "损坏的种植槽",
+        "description": "灯管频闪、土壤板结的地下种植槽，需要人工维持。",
+        "build_cost": {},
+        "build_time": 0,
         "job_type": "farmer",
-        "job_slots": 3,
-        "upgrades_to": ["hydroponics"],
+        "job_slots": 1,
+        "production_per_day": {"food": 3},
+        "consumption_per_day": {"power": 1},
+        "upgrades_to": ["food_1"],
         "downgrade_to": None,
+        "is_damaged": True,
     },
-    "warehouse": {
-        "key": "warehouse",
-        "name": "仓库",
-        "description": "存放物资，提升废料存储上限。需电力维持。",
-        "build_cost": {"scrap": 40},
-        "build_time": 8,
+    "food_1": {
+        "key": "food_1",
+        "name": "简陋的种植槽",
+        "description": "修好补光灯和灌溉系统的基础种植槽。",
+        "build_cost": {"scrap": 15},
+        "build_time": 10,
+        "job_type": "farmer",
+        "job_slots": 1,
+        "production_per_day": {"food": 6},
+        "consumption_per_day": {"power": 1},
+        "upgrades_to": [],
+        "downgrade_to": "food_0",
+    },
+
+    # ============================================================
+    # Storage
+    # ============================================================
+    "warehouse_0": {
+        "key": "warehouse_0",
+        "name": "半塌的仓库",
+        "description": "被碎石掩埋的仓储区，清理后勉强能存放少量物资。",
+        "build_cost": {},
+        "build_time": 0,
         "job_type": None,
         "job_slots": 0,
-        "passive_consumption": {"power": 0.2},
-        "upgrades_to": ["large_warehouse"],
+        "production_per_day": {},
+        "consumption_per_day": {},
+        "cap_effects": {"max_scrap": 50, "max_items": 10},
+        "upgrades_to": ["warehouse_1"],
         "downgrade_to": None,
-        "on_built_effect": "increase_scrap_cap_50",
+        "is_damaged": True,
     },
+    "warehouse_1": {
+        "key": "warehouse_1",
+        "name": "简陋的仓库",
+        "description": "加固货架后的仓储区，能存放更多废料和物品。",
+        "build_cost": {"scrap": 15},
+        "build_time": 10,
+        "job_type": None,
+        "job_slots": 0,
+        "production_per_day": {},
+        "consumption_per_day": {},
+        "cap_effects": {"max_scrap": 100, "max_items": 30},
+        "upgrades_to": [],
+        "downgrade_to": "warehouse_0",
+    },
+    "battery_1": {
+        "key": "battery_1",
+        "name": "蓄电池组",
+        "description": "旧时代储能电池重组，提升电力储备上限。",
+        "build_cost": {"scrap": 10},
+        "build_time": 10,
+        "job_type": None,
+        "job_slots": 0,
+        "production_per_day": {},
+        "consumption_per_day": {},
+        "cap_effects": {"max_power": 50},
+        "upgrades_to": [],
+        "downgrade_to": None,
+    },
+    "water_tank_1": {
+        "key": "water_tank_1",
+        "name": "水箱",
+        "description": "密封储水罐，可储存更多净水，需要少量电力维持低温。",
+        "build_cost": {"scrap": 10},
+        "build_time": 10,
+        "job_type": None,
+        "job_slots": 0,
+        "production_per_day": {},
+        "consumption_per_day": {},
+        "passive_consumption_per_day": {"power": 0.5},
+        "cap_effects": {"max_water": 50},
+        "upgrades_to": [],
+        "downgrade_to": None,
+    },
+    "food_storage_1": {
+        "key": "food_storage_1",
+        "name": "冰库",
+        "description": "小型冷藏室，延缓食物腐败，需要少量电力维持运转。",
+        "build_cost": {"scrap": 10},
+        "build_time": 10,
+        "job_type": None,
+        "job_slots": 0,
+        "production_per_day": {},
+        "consumption_per_day": {},
+        "passive_consumption_per_day": {"power": 0.5},
+        "cap_effects": {"max_food": 50},
+        "upgrades_to": [],
+        "downgrade_to": None,
+    },
+
+    # ============================================================
+    # Special
+    # ============================================================
     "gate": {
         "key": "gate",
         "name": "避难所大门",
@@ -62,6 +195,8 @@ ROOM_TEMPLATES = {
         "build_time": 0,
         "job_type": None,
         "job_slots": 0,
+        "production_per_day": {},
+        "consumption_per_day": {},
         "upgrades_to": [],
         "downgrade_to": None,
     },
@@ -73,61 +208,23 @@ ROOM_TEMPLATES = {
         "build_time": 0,
         "job_type": None,
         "job_slots": 0,
+        "production_per_day": {},
+        "consumption_per_day": {},
         "upgrades_to": [],
         "downgrade_to": None,
     },
 }
 
-# ---- upgrades ----
-
-ROOM_TEMPLATES["advanced_generator"] = {
-    "key": "advanced_generator",
-    "name": "高级发电机",
-    "description": "高效发电机组，输出功率大幅提升。",
-    "build_cost": {"scrap": 150, "power": 50},
-    "build_time": 30,
-    "job_type": "senior_power_tech",
-    "job_slots": 3,
-    "upgrades_to": [],
-    "downgrade_to": "generator",
-}
-
-ROOM_TEMPLATES["advanced_purifier"] = {
-    "key": "advanced_purifier",
-    "name": "高级净水房",
-    "description": "多级过滤系统，净水效率显著提高。",
-    "build_cost": {"scrap": 120, "power": 30},
-    "build_time": 25,
-    "job_type": "senior_water_tech",
-    "job_slots": 3,
-    "upgrades_to": [],
-    "downgrade_to": "water_purifier",
-}
-
-ROOM_TEMPLATES["hydroponics"] = {
-    "key": "hydroponics",
-    "name": "水培农场",
-    "description": "全自动水培系统，食物产量大幅提升。",
-    "build_cost": {"scrap": 120, "water": 40},
-    "build_time": 28,
-    "job_type": "hydroponics_tech",
-    "job_slots": 3,
-    "upgrades_to": [],
-    "downgrade_to": "farm",
-}
-
-ROOM_TEMPLATES["large_warehouse"] = {
-    "key": "large_warehouse",
-    "name": "大型仓库",
-    "description": "扩容仓储区，大幅提升物资存储上限。需更多电力。",
-    "build_cost": {"scrap": 100},
-    "build_time": 15,
-    "job_type": None,
-    "job_slots": 0,
-    "passive_consumption": {"power": 0.4},
-    "upgrades_to": [],
-    "downgrade_to": "warehouse",
-    "on_built_effect": "increase_scrap_cap_100",
+# Base rooms that can be built directly on empty slots (not upgrades).
+# The player must have unlocked the blueprint first.
+BUILDABLE_ROOM_KEYS = {
+    "power_1",
+    "water_1",
+    "food_1",
+    "warehouse_1",
+    "battery_1",
+    "water_tank_1",
+    "food_storage_1",
 }
 
 
@@ -136,7 +233,20 @@ def get_room(key: str) -> dict | None:
     return ROOM_TEMPLATES.get(key)
 
 
-def list_buildable() -> list[dict]:
-    """Return base rooms that can be built (exclude upgrades)."""
-    base_keys = {"generator", "water_purifier", "farm", "warehouse"}
-    return [ROOM_TEMPLATES[k] for k in base_keys if k in ROOM_TEMPLATES]
+def list_buildable(state=None) -> list[dict]:
+    """Return base rooms that can be built on empty slots.
+
+    If `state` is provided, only rooms whose blueprint has been unlocked are returned.
+    """
+    unlocked = None
+    if state is not None:
+        unlocked = getattr(state, "unlocked_blueprints", None)
+    rooms = []
+    for k in BUILDABLE_ROOM_KEYS:
+        tmpl = ROOM_TEMPLATES.get(k)
+        if not tmpl:
+            continue
+        if unlocked is not None and k not in unlocked:
+            continue
+        rooms.append(tmpl)
+    return rooms
