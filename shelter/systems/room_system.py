@@ -26,6 +26,9 @@ from shelter.config import (
     INITIAL_MAX_SCRAP,
     INITIAL_MAX_ITEMS,
 )
+from shelter.data.rooms import get_room
+from shelter.data.ruins import RUIN_TYPES, get_cell_spec
+from shelter.data.items import get_item
 
 
 # ============================================================
@@ -55,8 +58,6 @@ def _make_room_slot(
 
 def init_floors(state):
     """Initialize floors from the designer-defined layout table."""
-    from shelter.data.ruins import get_cell_spec
-
     state.floors = []
     for f in range(FLOORS):
         row = []
@@ -164,8 +165,6 @@ def refresh_vision(state):
 
 def recalc_caps(state):
     """Recalculate max resource caps from base values + built room effects."""
-    from shelter.data.rooms import get_room
-
     state.max_power = INITIAL_MAX_POWER
     state.max_water = INITIAL_MAX_WATER
     state.max_food = INITIAL_MAX_FOOD
@@ -231,8 +230,6 @@ def complete_construction(state, floor: int, room: int):
         ruin_type = slot.get("ruin_type")
         slot["ruin_type"] = None
         _award_ruin_rewards(state, ruin_type)
-        # Some ruins clear into a built room (e.g. elevator).
-        from shelter.data.ruins import RUIN_TYPES
         ruin_data = RUIN_TYPES.get(ruin_type, {})
         clears_to = ruin_data.get("clears_to")
         if clears_to:
@@ -259,7 +256,6 @@ def _apply_build_effect(state, room_type: str | None):
     """Apply one-time effects when a room finishes construction."""
     if not room_type:
         return
-    from shelter.data.rooms import get_room
 
     tmpl = get_room(room_type)
     if not tmpl:
@@ -296,8 +292,6 @@ def _award_ruin_rewards(state, ruin_type: str | None):
     """Award items when a ruin is cleared."""
     if not ruin_type:
         return
-    from shelter.data.ruins import RUIN_TYPES
-    from shelter.data.items import get_item
 
     ruin_data = RUIN_TYPES.get(ruin_type)
     if not ruin_data:
@@ -333,7 +327,6 @@ def demolish_room(state, floor: int, room: int):
     slot = get_room_slot(state, floor, room)
     if slot["state"] != ROOM_STATE_BUILT:
         return
-    from shelter.data.rooms import get_room
     tmpl = get_room(slot.get("room_type", ""))
     old_name = tmpl["name"] if tmpl else "房间"
 
@@ -356,8 +349,6 @@ def get_upgrade_options(state, floor: int, room: int) -> list[dict]:
         label: str
         subtext: str
     """
-    from shelter.data.rooms import get_room
-
     slot = get_room_slot(state, floor, room)
     tmpl = get_room(slot.get("room_type", ""))
     if not tmpl:
@@ -408,8 +399,6 @@ def apply_room_action(state, floor: int, room: int, action_type: str, target_key
     """Apply an upgrade/repair/downgrade/demolish action.
     Returns True on success.
     """
-    from shelter.data.rooms import get_room
-
     slot = get_room_slot(state, floor, room)
     tmpl = get_room(slot.get("room_type", ""))
     if not tmpl:
@@ -498,12 +487,12 @@ def _resource_attr(key: str) -> str | None:
     return {"power": "power", "water": "water", "food": "food", "scrap": "scrap"}.get(key)
 
 
-def _res_cn(key: str) -> str:
+def res_cn(key: str) -> str:
     """Map resource key to Chinese display name."""
     mapping = {"power": "电力", "water": "水", "food": "食物", "scrap": "废料"}
     return mapping.get(key, key)
 
 
-def _cost_cn(cost: dict) -> str:
+def cost_cn(cost: dict) -> str:
     """Format a cost dict as Chinese string, e.g. '废料:80  电力:50'."""
-    return "  ".join(f"{_res_cn(k)}:{v}" for k, v in cost.items())
+    return "  ".join(f"{res_cn(k)}:{v}" for k, v in cost.items())

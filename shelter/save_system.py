@@ -48,12 +48,9 @@ def load_game(slot: int) -> GameState | None:
     with open(path, "rb") as f:
         data = pickle.load(f)
     state = data["state"]
-    # Ensure backward compatibility: add missing fields with defaults
-    for fld in fields(GameState):
-        if not hasattr(state, fld.name):
-            setattr(state, fld.name, fld.default_factory() if fld.default_factory is not dataclasses.MISSING else fld.default)
 
-    # Migrate old intro_* fields to story_* fields (pre-2026-08-18 saves)
+    # Migrate old intro_* fields to story_* fields BEFORE filling defaults,
+    # otherwise the new fields get default values and the old values are lost.
     _intro_to_story = {
         "intro_active": "story_active",
         "intro_current_key": "story_current_key",
@@ -65,11 +62,21 @@ def load_game(slot: int) -> GameState | None:
         "intro_tutorial_title": "story_popup_title",
         "intro_tutorial_text": "story_popup_text",
     }
+    old_values = {}
     for old_key, new_key in _intro_to_story.items():
-        if hasattr(state, old_key) and not getattr(state, new_key, None):
+        if hasattr(state, old_key):
             old_val = getattr(state, old_key)
             if old_val is not None:
-                setattr(state, new_key, old_val)
+                old_values[new_key] = old_val
+
+    # Ensure backward compatibility: add missing fields with defaults
+    for fld in fields(GameState):
+        if not hasattr(state, fld.name):
+            setattr(state, fld.name, fld.default_factory() if fld.default_factory is not dataclasses.MISSING else fld.default)
+
+    # Apply migrated old values on top of defaults
+    for new_key, old_val in old_values.items():
+        setattr(state, new_key, old_val)
     for default_key, default_val in [
         ("story_popup_mode", "info"),
         ("story_choices", None),

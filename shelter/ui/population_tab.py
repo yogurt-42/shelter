@@ -98,14 +98,33 @@ def draw(surface: pygame.Surface, state, fonts: dict):
 
         # production / consumption info (dim, below name)
         info_parts = []
-        for res, rate in jt_data.get("production", {}).items():
-            info_parts.append(f"{res}+{rate}/s/人")
-        for res, rate in jt_data.get("consumption", {}).items():
-            info_parts.append(f"{res}-{rate}/s/人")
+        prod_cons = _per_day_rates(jt_key)
+        for res, rate in prod_cons.get("production", {}).items():
+            info_parts.append(f"{_res_cn(res)}+{rate}/天/人")
+        for res, rate in prod_cons.get("consumption", {}).items():
+            info_parts.append(f"{_res_cn(res)}-{rate}/天/人")
 
         info_text = "  ".join(info_parts) if info_parts else jt_data.get("description", "")
         info_surf = font.render(info_text, True, COLOR_TEXT_DIM)
         surface.blit(info_surf, (cx + 10, cy + 28))
+
+
+def _per_day_rates(job_type: str) -> dict:
+    """Return {production: {res: rate}, consumption: {res: rate}} from the first
+    room template that provides this job_type."""
+    from shelter.data.rooms import ROOM_TEMPLATES
+    for tmpl in ROOM_TEMPLATES.values():
+        if tmpl.get("job_type") == job_type:
+            return {
+                "production": tmpl.get("production_per_day", {}),
+                "consumption": tmpl.get("consumption_per_day", {}),
+            }
+    return {"production": {}, "consumption": {}}
+
+
+def _res_cn(key: str) -> str:
+    mapping = {"power": "电力", "water": "水", "food": "食物", "scrap": "废料"}
+    return mapping.get(key, key)
 
 
 def _draw_btn(surface, rect, label, font, enabled, mx, my):

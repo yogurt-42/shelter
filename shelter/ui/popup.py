@@ -110,7 +110,7 @@ def draw_build(surface: pygame.Surface, state, fonts: dict):
         surface.blit(name_surf, (title_rect.x + 4, title_rect.y + 6))
 
         # cost + time (right-aligned)
-        cost_str = room_system._cost_cn(tmpl["build_cost"])
+        cost_str = room_system.cost_cn(tmpl["build_cost"])
         meta_text = f"[{cost_str}]  {tmpl['build_time']}s"
         meta_surf = font.render(meta_text, True, COLOR_TEXT_MID)
         surface.blit(meta_surf, (title_rect.right - meta_surf.get_width() - 4, title_rect.y + 6))
@@ -172,8 +172,8 @@ def draw_ruin_info(surface: pygame.Surface, state, fonts: dict):
     from shelter.data.ruins import RUIN_TYPES, can_clear
 
     slot = state.get_room_slot(state.popup_floor, state.popup_room)
-    ruin_key = slot.get("ruin_type", "light_rubble")
-    ruin = RUIN_TYPES.get(ruin_key, RUIN_TYPES["light_rubble"])
+    ruin_key = slot.get("ruin_type", "debris_back")
+    ruin = RUIN_TYPES.get(ruin_key, RUIN_TYPES["debris_back"])
     can, reasons = can_clear(state, ruin)
 
     # count rows: desc + cost + conditions + (failures) + button
@@ -193,7 +193,7 @@ def draw_ruin_info(surface: pygame.Surface, state, fonts: dict):
     _text_row(surface, rect, start_y, row, ruin["description"], font, COLOR_TEXT_DIM); row += 1
     row += 0  # spacer
     # cost
-    cost_str = room_system._cost_cn(ruin["clear_cost"])
+    cost_str = room_system.cost_cn(ruin["clear_cost"])
     _text_row(surface, rect, start_y, row,
               f"清理成本: {cost_str}   耗时: {ruin['clear_time']}s",
               font, COLOR_TEXT_BRIGHT); row += 1
@@ -234,8 +234,8 @@ def handle_ruin_info_click(pos: tuple, state) -> bool:
     from shelter.data.ruins import RUIN_TYPES, can_clear
 
     slot = state.get_room_slot(state.popup_floor, state.popup_room)
-    ruin_key = slot.get("ruin_type", "light_rubble")
-    ruin = RUIN_TYPES.get(ruin_key, RUIN_TYPES["light_rubble"])
+    ruin_key = slot.get("ruin_type", "debris_back")
+    ruin = RUIN_TYPES.get(ruin_key, RUIN_TYPES["debris_back"])
     can, reasons = can_clear(state, ruin)
 
     n_rows = 2 + len(ruin.get("conditions", [])) + len(reasons) + 1
@@ -310,18 +310,26 @@ def draw_room_info(surface: pygame.Surface, state, fonts: dict):
         _text_row(surface, rect, start_y, row,
                   f"岗位: {job_name}  {current}/{job_slots}", font, COLOR_TEXT_BRIGHT); row += 1
 
-        prod_parts = [f"{room_system._res_cn(k)}+{v}/s/人" for k, v in jt.get("production", {}).items()]
-        cons_parts = [f"{room_system._res_cn(k)}-{v}/s/人" for k, v in jt.get("consumption", {}).items()]
+        # Show per-day rates from room templates (not the per-second job_type rates).
+        from shelter.data.rooms import ROOM_TEMPLATES
+        rates = {"production": {}, "consumption": {}}
+        for rt in ROOM_TEMPLATES.values():
+            if rt.get("job_type") == tmpl.get("job_type"):
+                rates["production"] = rt.get("production_per_day", {})
+                rates["consumption"] = rt.get("consumption_per_day", {})
+                break
+        prod_parts = [f"{room_system.res_cn(k)}+{v}/天/人" for k, v in rates["production"].items()]
+        cons_parts = [f"{room_system.res_cn(k)}-{v}/天/人" for k, v in rates["consumption"].items()]
         rate_text = "  ".join(prod_parts + cons_parts)
         if rate_text:
             _text_row(surface, rect, start_y, row, rate_text, font, COLOR_TEXT_MID); row += 1
-    elif tmpl.get("passive_consumption") or tmpl.get("passive_production"):
+    elif tmpl.get("passive_consumption_per_day") or tmpl.get("passive_production_per_day"):
         # passive room (no workers)
         parts = []
-        for k, v in tmpl.get("passive_production", {}).items():
-            parts.append(f"{room_system._res_cn(k)}+{v}/s")
-        for k, v in tmpl.get("passive_consumption", {}).items():
-            parts.append(f"{room_system._res_cn(k)}-{v}/s")
+        for k, v in tmpl.get("passive_production_per_day", {}).items():
+            parts.append(f"{room_system.res_cn(k)}+{v}/天")
+        for k, v in tmpl.get("passive_consumption_per_day", {}).items():
+            parts.append(f"{room_system.res_cn(k)}-{v}/天")
         if parts:
             _text_row(surface, rect, start_y, row,
                       f"被动: {'  '.join(parts)}", font, COLOR_TEXT_MID); row += 1
@@ -451,33 +459,39 @@ TUTORIAL_LINE_HEIGHT = 22
 CHOICE_LINE_HEIGHT = 26
 
 
-def draw_story(surface: pygame.Surface, state, fonts: dict):
-    """Draw a story popup: either info text or a list of choices."""
+def _story_popup_layout(state):
+    """Compute story popup geometry shared by draw and click handlers.
+    Returns (mode, title, lines, choices, rect, start_y, choice_y).
+    """
     mode = getattr(state, "story_popup_mode", "info")
     title = getattr(state, "story_popup_title", "")
     text = getattr(state, "story_popup_text", "")
     lines = text.split("\n") if text else []
-
+    choices = getattr(state, "story_choices", []) or [] if mode == "choice" else []
     if mode == "choice":
-        choices = getattr(state, "story_choices", []) or []
         content_h = 36 + 16 + len(lines) * TUTORIAL_LINE_HEIGHT + 16 + len(choices) * CHOICE_LINE_HEIGHT + 42
     else:
         content_h = 36 + 16 + len(lines) * TUTORIAL_LINE_HEIGHT + 42
-
     rect = _popup_rect(content_h)
+    start_y = _content_start_y(rect)
+    choice_y = start_y + len(lines) * TUTORIAL_LINE_HEIGHT + 16 if mode == "choice" else None
+    return mode, title, lines, choices, rect, start_y, choice_y
+
+
+def draw_story(surface: pygame.Surface, state, fonts: dict):
+    """Draw a story popup: either info text or a list of choices."""
+    mode, title, lines, choices, rect, start_y, choice_y = _story_popup_layout(state)
+
     _draw_popup_frame(surface, rect)
     font = fonts["small"]
     _draw_title(surface, rect, title, font)
 
-    start_y = _content_start_y(rect)
     for i, line in enumerate(lines):
         surf = font.render(line, True, COLOR_TEXT_BRIGHT)
         surface.blit(surf, (rect.x + 16, start_y + i * TUTORIAL_LINE_HEIGHT))
 
     if mode == "choice":
-        choices = getattr(state, "story_choices", []) or []
         mouse_x, mouse_y = pygame.mouse.get_pos()
-        choice_y = start_y + len(lines) * TUTORIAL_LINE_HEIGHT + 16
         for i, choice in enumerate(choices):
             row_y = choice_y + i * CHOICE_LINE_HEIGHT
             row_rect = pygame.Rect(rect.x + 16, row_y, rect.width - 32, CHOICE_LINE_HEIGHT - 4)
@@ -498,20 +512,12 @@ def handle_story_click(pos: tuple, state) -> bool:
     """Handle click inside a story popup. Info mode closes; choice mode selects."""
     from shelter.systems import story_system
 
-    mode = getattr(state, "story_popup_mode", "info")
+    mode, _title, lines, choices, rect, start_y, choice_y = _story_popup_layout(state)
+    x, y = pos
+
     if mode == "choice":
-        # Determine which choice row was clicked.
-        title = getattr(state, "story_popup_title", "")
-        text = getattr(state, "story_popup_text", "")
-        lines = text.split("\n") if text else []
-        choices = getattr(state, "story_choices", []) or []
-        content_h = 36 + 16 + len(lines) * TUTORIAL_LINE_HEIGHT + 16 + len(choices) * CHOICE_LINE_HEIGHT + 42
-        rect = _popup_rect(content_h)
-        x, y = pos
         if not rect.collidepoint(x, y):
             return False
-        start_y = _content_start_y(rect)
-        choice_y = start_y + len(lines) * TUTORIAL_LINE_HEIGHT + 16
         for i, _choice in enumerate(choices):
             row_y = choice_y + i * CHOICE_LINE_HEIGHT
             row_rect = pygame.Rect(rect.x + 16, row_y, rect.width - 32, CHOICE_LINE_HEIGHT - 4)
@@ -548,7 +554,7 @@ def _text_row(surface: pygame.Surface, rect: pygame.Rect, start_y: int,
 def _condition_label(cond: dict) -> str:
     ctype = cond.get("type", "")
     if ctype == "has_resources":
-        parts = [f"{room_system._res_cn(k)}:{v}" for k, v in cond.items() if k != "type"]
+        parts = [f"{room_system.res_cn(k)}:{v}" for k, v in cond.items() if k != "type"]
         return f"拥有资源: {' '.join(parts)}"
     elif ctype == "has_room":
         from shelter.data.rooms import get_room

@@ -87,14 +87,14 @@ def draw(surface: pygame.Surface, state, fonts: dict):
     surface.blit(time_surf, (WINDOW_WIDTH - time_surf.get_width() - 12, 7))
 
 
-def handle_click(pos: tuple, state) -> bool:
+def handle_click(pos: tuple, state, fonts: dict) -> bool:
     """Handle tab bar click. Only visible tabs respond."""
     x, y = pos
     if y < 0 or y > TAB_BAR_HEIGHT:
         return False
 
     tab_x = 12
-    font = pygame.font.SysFont("SimHei", FONT_SIZE_SMALL)
+    font = fonts["small"]
     for key, label in _visible_tab_list(state):
         text = f"[ {label} ]"
         text_surf = font.render(text, True, (255, 255, 255))

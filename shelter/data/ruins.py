@@ -85,7 +85,7 @@ def evaluate_condition(state, condition: dict) -> tuple[bool, str]:
     elif ctype == "has_room":
         room_type = condition.get("room_type", "")
         found = any(
-            slot["state"] == 2 and slot["room_type"] == room_type
+            slot["state"] == ROOM_STATE_BUILT and slot["room_type"] == room_type
             for floor in state.floors
             for slot in floor
         )

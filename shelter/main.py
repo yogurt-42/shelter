@@ -119,7 +119,7 @@ def main():
 
     running = True
     while running:
-        dt = clock.tick(FPS)
+        clock.tick(FPS)
 
         # ---- events ----
         for event in pygame.event.get():
@@ -135,7 +135,7 @@ def main():
                     continue
 
                 if event.button == 1:  # left click
-                    if tab_bar.handle_click(pos, state):
+                    if tab_bar.handle_click(pos, state, fonts):
                         # Story sequence: if a newly-unlocked tab is clicked, show its popup.
                         if (
                             state.story_active
