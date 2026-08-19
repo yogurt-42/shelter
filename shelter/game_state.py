@@ -80,6 +80,7 @@ class GameState:
     story_choices: list | None = None
     story_queue: list = field(default_factory=list)
     story_flags: dict = field(default_factory=dict)
+    story_resume_tab: int | None = None  # after unlocking a tab, player must return here to resume
 
     # ---- log ----
     logs: list[str] = field(default_factory=list)

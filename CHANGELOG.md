@@ -195,6 +195,32 @@
 
 ---
 
+## 步骤 9 — 测试套件补齐
+
+**2026-08-19**
+
+补齐项目单元测试，覆盖所有可测模块，并修复重构后 room_system 的遗留问题。
+
+**新增测试：**
+- `tests/test_data_rooms.py` — 房间模板字段、成本、工种引用、升级链一致性
+- `tests/test_data_ruins.py` — 废墟类型字段、条件类型、`clears_to` 目标、初始楼层布局
+- `tests/test_game_state.py` — 默认值、工人分配、物品管理
+- `tests/test_resource_system.py` — 产出/消耗、无限资源、资源 clamp、被动消耗、饥饿警告
+- `tests/test_room_system.py` — 建造/清理/完成状态机、维修半价、视野传播
+- `tests/test_save_system.py` — 存档/读档 roundtrip、list/delete、旧档字段迁移
+- `tests/test_story_system.py` — 剧情事件驱动、标签解锁、choice/condition 分支、队列
+- `tests/test_console.py` — 玩家/管理员命令解析
+
+**修复问题：**
+- `shelter/systems/room_system.py`：`get_upgrade_options()` 引用未定义的 `_cost_cn`，改为 `cost_cn()`
+- `shelter/systems/room_system.py`：`propagate_vision()` / `reveal_around()` 由硬编码 `FLOORS × ROOMS_PER_FLOOR` 改为按 `state.floors` 实际尺寸遍历，支持最小测试地图
+
+**验证：**
+- `python -m pytest tests/ -q` 全部通过
+- 删除临时文档 `TESTING.md`
+
+---
+
 ## 技术决策记录
 
 - **纯 dataclass 而非 ECS**：当前规模下 dataclass 更简单，无需引入 ECS 框架

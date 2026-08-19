@@ -27,7 +27,7 @@ Handlers receive (state, data) and return True if the event should block.
 
 import time
 import random
-from shelter.config import EVENT_INTERVAL_MIN, EVENT_INTERVAL_MAX, TAB_MATERIALS
+from shelter.config import EVENT_INTERVAL_MIN, EVENT_INTERVAL_MAX, TAB_STATUS, TAB_MATERIALS
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +107,7 @@ def resume_story(state):
     """Resume the active story after a blocking event (e.g. popup closed)."""
     state.story_paused = False
     state.story_pause_tab = None
+    state.story_resume_tab = None
     state.story_choices = None
     state.story_last_event_time = time.time()
 
@@ -144,6 +145,7 @@ def _start_next_story(state):
     state.story_event_index = 0
     state.story_paused = False
     state.story_pause_tab = None
+    state.story_resume_tab = None
     state.story_popup_title = ""
     state.story_popup_text = ""
     state.story_popup_mode = "info"
@@ -156,6 +158,7 @@ def _finish_story(state):
     state.story_active = False
     state.story_paused = False
     state.story_pause_tab = None
+    state.story_resume_tab = None
     state.story_choices = None
 
     # If this was the intro, start normal gameplay systems.
@@ -206,6 +209,7 @@ def _action_unlock_tab(state, data):
 
     state.unlock_tab(tab)
     state.story_pause_tab = tab
+    state.story_resume_tab = TAB_STATUS
     state.story_popup_title = title
     state.story_popup_text = text
     state.story_popup_mode = "info"

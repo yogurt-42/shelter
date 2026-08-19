@@ -11,19 +11,21 @@ SAVES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 MAX_SLOTS = 3
 
 
-def _ensure_dir():
-    os.makedirs(SAVES_DIR, exist_ok=True)
+def _ensure_dir(saves_dir: str | None = None):
+    target = saves_dir if saves_dir is not None else SAVES_DIR
+    os.makedirs(target, exist_ok=True)
 
 
-def _slot_path(slot: int) -> str:
-    return os.path.join(SAVES_DIR, f"slot_{slot}.sav")
+def _slot_path(slot: int, saves_dir: str | None = None) -> str:
+    target = saves_dir if saves_dir is not None else SAVES_DIR
+    return os.path.join(target, f"slot_{slot}.sav")
 
 
-def save_game(state: GameState, slot: int) -> str:
+def save_game(state: GameState, slot: int, saves_dir: str | None = None) -> str:
     """Save current game to a slot. Returns a status message."""
     if not 1 <= slot <= MAX_SLOTS:
         return f"无效槽位: {slot}（可用 1-{MAX_SLOTS}）"
-    _ensure_dir()
+    _ensure_dir(saves_dir)
     data = {
         "slot": slot,
         "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -33,16 +35,16 @@ def save_game(state: GameState, slot: int) -> str:
         "population": state.population,
         "state": state,
     }
-    with open(_slot_path(slot), "wb") as f:
+    with open(_slot_path(slot, saves_dir), "wb") as f:
         pickle.dump(data, f)
     return f"已保存至槽位 {slot}。"
 
 
-def load_game(slot: int) -> GameState | None:
+def load_game(slot: int, saves_dir: str | None = None) -> GameState | None:
     """Load a GameState from a slot. Returns None if slot is empty or invalid."""
     if not 1 <= slot <= MAX_SLOTS:
         return None
-    path = _slot_path(slot)
+    path = _slot_path(slot, saves_dir)
     if not os.path.exists(path):
         return None
     with open(path, "rb") as f:
@@ -82,6 +84,7 @@ def load_game(slot: int) -> GameState | None:
         ("story_choices", None),
         ("story_queue", []),
         ("story_flags", {}),
+        ("story_resume_tab", None),
     ]:
         if not hasattr(state, default_key):
             setattr(state, default_key, default_val)
@@ -93,11 +96,11 @@ def load_game(slot: int) -> GameState | None:
     return state
 
 
-def list_saves() -> list[dict]:
+def list_saves(saves_dir: str | None = None) -> list[dict]:
     """Return metadata for all existing save slots."""
     result = []
     for slot in range(1, MAX_SLOTS + 1):
-        path = _slot_path(slot)
+        path = _slot_path(slot, saves_dir)
         if not os.path.exists(path):
             continue
         try:
@@ -116,11 +119,11 @@ def list_saves() -> list[dict]:
     return result
 
 
-def delete_save(slot: int) -> str:
+def delete_save(slot: int, saves_dir: str | None = None) -> str:
     """Delete a save slot. Returns a status message."""
     if not 1 <= slot <= MAX_SLOTS:
         return f"无效槽位: {slot}（可用 1-{MAX_SLOTS}）"
-    path = _slot_path(slot)
+    path = _slot_path(slot, saves_dir)
     if not os.path.exists(path):
         return f"槽位 {slot} 为空，无需删除。"
     os.remove(path)

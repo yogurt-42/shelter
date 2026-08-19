@@ -509,7 +509,11 @@ def draw_story(surface: pygame.Surface, state, fonts: dict):
 
 
 def handle_story_click(pos: tuple, state) -> bool:
-    """Handle click inside a story popup. Info mode closes; choice mode selects."""
+    """Handle click inside a story popup. Info mode closes; choice mode selects.
+
+    Note: closing an info popup does NOT resume the story. The story only resumes
+    when the player clicks the tab designated by `state.story_resume_tab`.
+    """
     from shelter.systems import story_system
 
     mode, _title, lines, choices, rect, start_y, choice_y = _story_popup_layout(state)
@@ -526,9 +530,9 @@ def handle_story_click(pos: tuple, state) -> bool:
                 return True
         return False
 
-    # Info mode: close and resume.
+    # Info mode: close only. The outer loop will resume when the player returns
+    # to the resume tab (usually TAB_STATUS).
     state.close_popup()
-    story_system.resume_story(state)
     return True
 
 

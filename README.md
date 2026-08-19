@@ -13,6 +13,20 @@
 - `shelter/save_system.py` — 存档
 - `design/` — 设计文档（流程、机制、剧情、数值）
 
+## 运行
+
+```bash
+cd D:/shelter && python -m shelter.main
+```
+
+## 测试
+
+```bash
+cd D:/shelter && python -m pytest tests/ -q
+```
+
+测试覆盖 `data/` 契约、`game_state.py` 状态、`systems/` 逻辑、`save_system.py` 与 `ui/console.py` 命令解析，不启动 Pygame 窗口。详见 `tests/` 目录。
+
 ## 当前状态
 
 第一批房间系统与开场剧情已落地。剧情/事件数据驱动，支持选项分支与自定义 action 扩展。

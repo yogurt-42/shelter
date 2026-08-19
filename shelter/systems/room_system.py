@@ -97,9 +97,10 @@ def propagate_vision(state):
     changed = True
     while changed:
         changed = False
-        for f in range(FLOORS):
-            for r in range(ROOMS_PER_FLOOR):
-                slot = state.floors[f][r]
+        for f in range(len(state.floors)):
+            row = state.floors[f]
+            for r in range(len(row)):
+                slot = row[r]
                 if not slot.get("revealed") or slot.get("void"):
                     continue
                 if reveal_around(state, f, r):
@@ -124,7 +125,7 @@ def reveal_around(state, floor: int, room: int) -> bool:
     if provides_horizontal:
         for dr in (-1, 1):
             nr = room + dr
-            if 0 <= nr < ROOMS_PER_FLOOR:
+            if 0 <= nr < len(state.floors[floor]):
                 neighbor = state.floors[floor][nr]
                 if not neighbor.get("void") and not neighbor.get("revealed"):
                     neighbor["revealed"] = True
@@ -134,7 +135,7 @@ def reveal_around(state, floor: int, room: int) -> bool:
     if is_elevator:
         for df in (-1, 1):
             nf = floor + df
-            if 0 <= nf < FLOORS:
+            if 0 <= nf < len(state.floors):
                 neighbor = state.floors[nf][room]
                 is_elevator_neighbor = (
                     neighbor.get("room_type") == "elevator"
@@ -369,7 +370,7 @@ def get_upgrade_options(state, floor: int, room: int) -> list[dict]:
                 "target_tmpl": ut,
                 "cost": cost,
                 "label": f"{label} -> {ut['name']}",
-                "subtext": f"费用: {_cost_cn(cost)}",
+                "subtext": f"费用: {cost_cn(cost)}",
             })
 
     if tmpl.get("downgrade_to"):

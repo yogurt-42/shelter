@@ -8,6 +8,7 @@ Chinese player-facing text, English codebase.
 
 ```bash
 cd D:/shelter && python -m shelter.main          # launch game
+cd D:/shelter && python -m pytest tests/ -q      # run test suite
 cd D:/shelter && python -c "from shelter.game_state import GameState; ..."  # REPL testing
 ```
 
@@ -49,6 +50,16 @@ shelter/
     ├── console.py              # bottom command line, /player //admin parsing
     └── popup.py                # overlay: build/ruin/room-info/room-action/story popups
 ```
+
+tests/                          # unit tests (no Pygame window, mock time/file I/O)
+├── test_data_rooms.py          # ROOM_TEMPLATES contract tests
+├── test_data_ruins.py          # RUIN_TYPES + INITIAL_FLOOR_LAYOUT contract tests
+├── test_game_state.py          # GameState dataclass behavior
+├── test_resource_system.py     # production, consumption, starvation warnings
+├── test_room_system.py         # room state machine, vision propagation
+├── test_save_system.py         # pickle save/load roundtrip + migration
+├── test_story_system.py        # story event actions, choices, conditions
+└── test_console.py             # command parsing without pygame surface
 
 ## Core Architecture
 

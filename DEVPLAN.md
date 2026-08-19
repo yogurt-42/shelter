@@ -13,6 +13,7 @@
 
 | 6 | 数值平衡与第一批房间落地 | 房间分级模板、废墟/布局、资源/day计算、启动资金事件、开场剧情事件序列 |
 | 7 | 项目结构解耦与剧情扩展性 | GameState瘦身、room_system解耦、story_system泛化支持多剧情/选项/条件 |
+| 8 | 测试套件补齐 | 新增 `tests/`：data契约、game_state、resource/room/story_system、save_system、console命令解析 |
 
 ## 近期计划
 

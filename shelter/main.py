@@ -136,15 +136,16 @@ def main():
 
                 if event.button == 1:  # left click
                     if tab_bar.handle_click(pos, state, fonts):
-                        # Story sequence: if a newly-unlocked tab is clicked, show its popup.
-                        if (
-                            state.story_active
-                            and state.story_paused
-                            and state.story_pause_tab == state.active_tab
-                        ):
-                            state.popup_type = "story"
-                            state.popup_floor = 0
-                            state.popup_room = 0
+                        # Story sequence: handle newly-unlocked tab and resume tab.
+                        if state.story_active and state.story_paused:
+                            if state.story_pause_tab == state.active_tab:
+                                # Player clicked the newly unlocked tab: show its tutorial.
+                                state.popup_type = "story"
+                                state.popup_floor = 0
+                                state.popup_room = 0
+                            elif state.story_resume_tab == state.active_tab:
+                                # Player returned to the resume tab (status): continue story.
+                                story_system.resume_story(state)
                     elif state.active_tab == TAB_BUILD:
                         build_tab.handle_mouse_down(pos, state)
                     elif state.active_tab == TAB_POPULATION:
@@ -174,11 +175,7 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if state.popup_type:
-                        if state.popup_type == "story":
-                            state.close_popup()
-                            story_system.resume_story(state)
-                        else:
-                            state.close_popup()
+                        state.close_popup()
                     else:
                         state.console_input = ""
                 elif event.key == pygame.K_TAB:
