@@ -48,6 +48,8 @@ STATE_LABELS = {
     ROOM_STATE_CLEARING: "清理中",
 }
 
+FLOOR_LABELS = ["地面层", "地下1层", "地下2层", "地下3层"]
+
 # ---- drag state (module-level, UI-only) ----
 _dragging = False
 _drag_start_mouse_x = 0
@@ -295,7 +297,7 @@ def draw(surface: pygame.Surface, state, fonts: dict):
                     surface.blit(hint, (hint_x, hint_y))
 
         # ---- floor label (vertically centered with the cell row, pinned to left edge) ----
-        label = f"第{f + 1}层"
+        label = FLOOR_LABELS[f] if f < len(FLOOR_LABELS) else f"第{f}层"
         title_surf = font.render(label, True, COLOR_TEXT_BRIGHT)
         label_x = content_rect.left + 8
         label_y = cell_y + (cell_h - title_surf.get_height()) // 2

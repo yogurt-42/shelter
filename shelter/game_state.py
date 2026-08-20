@@ -102,6 +102,8 @@ class GameState:
     popup_type: str | None = None
     popup_floor: int = 0
     popup_room: int = 0
+    popup_scroll_offset: int = 0
+    popup_content_height: int = 0
 
     # ---- blueprints ----
     unlocked_blueprints: set = field(default_factory=set)
@@ -140,9 +142,11 @@ class GameState:
         self.popup_type = ptype
         self.popup_floor = floor
         self.popup_room = room
+        self.popup_scroll_offset = 0
 
     def close_popup(self):
         self.popup_type = None
+        self.popup_scroll_offset = 0
 
     # ============================================================
     # Room helpers (thin getters only)

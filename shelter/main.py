@@ -167,7 +167,10 @@ def main():
                     build_tab.handle_mouse_motion(event.pos, state)
 
             elif event.type == pygame.MOUSEWHEEL:
-                if state.active_tab == TAB_STATUS:
+                if state.popup_type:
+                    from shelter.ui import popup
+                    popup.handle_wheel(event.y, state)
+                elif state.active_tab == TAB_STATUS:
                     status_tab.handle_wheel(event.y, state)
                 elif state.active_tab == TAB_BUILD:
                     build_tab.handle_wheel(event.y, state)
